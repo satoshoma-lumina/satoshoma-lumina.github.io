@@ -28,9 +28,17 @@ app = Flask(__name__)
 CORS(app)
 
 # --- 認証設定 ---
+# このブロックがRenderの環境変数から認証情報を読み込むように変更されています
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name('delta-wonder-471708-u1-93f8d5bbdf1c.json', scope)
+# 環境変数からJSON文字列を取得
+json_str = os.environ.get('GOOGLE_CREDENTIALS_JSON')
+# JSON文字列を辞書型に変換
+creds_dict = json.loads(json_str)
+# 辞書から認証情報を作成
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
+# --- 認証設定ここまで ---
+
 spreadsheet = client.open("店舗マスタ_LUMINA Offer用")
 user_management_sheet = spreadsheet.worksheet("ユーザー管理")
 offer_management_sheet = spreadsheet.worksheet("オファー管理")
@@ -38,14 +46,14 @@ store_master_sheet = spreadsheet.worksheet("店舗マスタ")
 postings_sheet = spreadsheet.worksheet("募集求人")
 
 # LINE API
-configuration = Configuration(access_token=os.environ.get('YOUR_CHANNEL_ACCESS_TOKEN', ''))
-handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET', ''))
+# ※Renderの環境変数に 'YOUR_CHANNEL_ACCESS_TOKEN' と 'YOUR_CHANNEL_SECRET' が正しく設定されていることを確認してください
+configuration = Configuration(access_token=os.environ.get('YOUR_CHANNEL_ACCESS_TOKEN'))
+handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET'))
 
 # Gemini API
+# ※Renderの環境変数に 'GEMINI_API_KEY' が正しく設定されていることを確認してください
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
-
-# --- ★★★★★ ここからが変更された部分 ★★★★★ ---
 
 def send_delayed_offer(user_id, user_wishes):
     """指定された時間まで待機し、オファーを送信する関数"""
@@ -141,9 +149,11 @@ def find_and_generate_offer(user_wishes):
         return None, None, "最適なサロンが見つかりませんでした。"
 
 def create_salon_flex_message(salon, offer_text):
+    # '役職' or 'role_x' (from merge)
+    role = salon.get("role_x") or salon.get("役職")
     return {
         "type": "bubble", "hero": { "type": "image", "url": salon.get("画像URL", ""), "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
-        "body": { "type": "box", "layout": "vertical", "contents": [ { "type": "text", "text": salon.get("店舗名", ""), "weight": "bold", "size": "xl" }, { "type": "box", "layout": "vertical", "margin": "lg", "spacing": "sm", "contents": [ { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "勤務地", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": salon.get("住所", ""), "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "募集役職", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": salon.get("役職", ""), "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "メッセージ", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": offer_text, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]} ]} ] },
+        "body": { "type": "box", "layout": "vertical", "contents": [ { "type": "text", "text": salon.get("店舗名", ""), "weight": "bold", "size": "xl" }, { "type": "box", "layout": "vertical", "margin": "lg", "spacing": "sm", "contents": [ { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "勤務地", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": salon.get("住所", ""), "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "募集役職", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": role, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "メッセージ", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": offer_text, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]} ]} ] },
         "footer": { "type": "box", "layout": "vertical", "spacing": "sm", "contents": [ { "type": "button", "style": "link", "height": "sm", "action": { "type": "uri", "label": "詳しく見る", "uri": "https://example.com" }}, { "type": "button", "style": "primary", "height": "sm", "action": { "type": "postback", "label": "サロンから話を聞いてみる", "data": f"accept_offer&salon_id={salon.get('店舗ID')}" }, "color": "#FF6B6B"} ], "flex": 0 }
     }
 
@@ -192,8 +202,11 @@ def trigger_offer():
         user_row = [user_row_dict.get(h) for h in user_headers]
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
-            user_management_sheet.update(f'A{cell.row}', [user_row])
+            # 既存ユーザーの場合は行を更新
+            range_to_update = f'A{cell.row}:{chr(ord("A") + len(user_row) - 1)}{cell.row}'
+            user_management_sheet.update(range_to_update, [user_row])
         else:
+            # 新規ユーザーの場合は行を追加
             user_management_sheet.append_row(user_row)
     except Exception as e:
         print(f"ユーザー管理シートへの書き込みエラー: {e}")
@@ -221,4 +234,6 @@ def trigger_offer():
     return jsonify({"status": "success", "message": "Offer task scheduled"})
 
 if __name__ == "__main__":
-    app.run(port=5001)
+    # Render環境ではPORT環境変数が設定されるため、それに従う
+    port = int(os.environ.get("PORT", 5001))
+    app.run(host="0.0.0.0", port=port)
