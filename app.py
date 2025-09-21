@@ -22,10 +22,15 @@ from linebot.v3.messaging import (
     FlexMessage,
     FlexContainer
 )
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
+# ★変更点：PostbackEventが不要になったため、インポートから削除
+from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
 app = Flask(__name__)
 CORS(app)
+
+# --- ★変更点：LIFF IDをファイルの先頭で定数として定義 ---
+# 面談日程調整フォームのLIFF ID
+SCHEDULE_LIFF_ID = "2008066763-X5mxymoj"
 
 # --- 認証設定 ---
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -75,6 +80,7 @@ def send_delayed_offer(user_id, user_wishes):
         print(f"遅延送信中のエラー: {e}")
 
 def find_and_generate_offer(user_wishes):
+    # (この関数に変更はありません)
     store_master_data = store_master_sheet.get_all_records()
     postings_data = postings_sheet.get_all_records()
 
@@ -144,19 +150,29 @@ def find_and_generate_offer(user_wishes):
 
 def create_salon_flex_message(salon, offer_text):
     role = salon.get("role_x") or salon.get("役職")
+    salon_id = salon.get('店舗ID')
+    # ★変更点：ボタンを押したら直接LIFFが開くように、アクションを「uri」に変更
+    liff_url = f"https://liff.line.me/{SCHEDULE_LIFF_ID}?salonId={salon_id}"
+    
     return {
         "type": "bubble", "hero": { "type": "image", "url": salon.get("画像URL", ""), "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
         "body": { "type": "box", "layout": "vertical", "contents": [ { "type": "text", "text": salon.get("店舗名", ""), "weight": "bold", "size": "xl" }, { "type": "box", "layout": "vertical", "margin": "lg", "spacing": "sm", "contents": [ { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "勤務地", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": salon.get("住所", ""), "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "募集役職", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": role, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "メッセージ", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": offer_text, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]} ]} ] },
-        "footer": { "type": "box", "layout": "vertical", "spacing": "sm", "contents": [ { "type": "button", "style": "link", "height": "sm", "action": { "type": "uri", "label": "詳しく見る", "uri": "https://example.com" }}, { "type": "button", "style": "primary", "height": "sm", "action": { "type": "postback", "label": "サロンから話を聞いてみる", "data": f"action=accept_offer&salon_id={salon.get('店舗ID')}" }, "color": "#FF6B6B"} ], "flex": 0 }
+        "footer": { "type": "box", "layout": "vertical", "spacing": "sm", "contents": [ 
+            { "type": "button", "style": "link", "height": "sm", "action": { "type": "uri", "label": "詳しく見る", "uri": "https://example.com" }}, 
+            # ★変更点：アクションタイプを'uri'に、uriプロパティにLIFF URLを設定
+            { "type": "button", "style": "primary", "height": "sm", "action": { "type": "uri", "label": "サロンから話を聞いてみる", "uri": liff_url }, "color": "#FF6B6B"} 
+        ], "flex": 0 }
     }
 
 def get_age_from_birthdate(birthdate):
+    # (この関数に変更はありません)
     today = datetime.today()
     birth_date = datetime.strptime(birthdate, '%Y-%m-%d')
     return today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
 
 @app.route("/callback", methods=['POST'])
 def callback():
+    # (この関数に変更はありません)
     signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
     try: handler.handle(body, signature)
@@ -165,37 +181,20 @@ def callback():
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
+    # (この関数に変更はありません)
     with ApiClient(configuration) as api_client:
         line_bot_api = MessagingApi(api_client)
         line_bot_api.reply_message_with_http_info(
             ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text="ご登録ありがとうございます。リッチメニューからプロフィールをご入力ください。")])
         )
 
-@handler.add(PostbackEvent)
-def handle_postback(event):
-    data_string = event.postback.data
-    params = dict(x.split('=') for x in data_string.split('&'))
-    action = params.get('action')
-    salon_id = params.get('salon_id')
-
-    if action == 'accept_offer':
-        # ★★★★★ ここにIDを設定 ★★★★★
-        liff_id = "2008066763-X5mxymoj" 
-        liff_url = f"https://liff.line.me/{liff_id}?salonId={salon_id}"
-
-        with ApiClient(configuration) as api_client:
-            line_bot_api = MessagingApi(api_client)
-            reply_message = TextMessage(text=liff_url)
-            
-            line_bot_api.reply_message(
-                ReplyMessageRequest(
-                    reply_token=event.reply_token,
-                    messages=[reply_message]
-                )
-            )
+# ★★★★★ 削除された機能 ★★★★★
+# Postbackイベントを処理する handle_postback 関数は不要になったため削除しました。
+# ★★★★★★★★★★★★★★★★★
 
 @app.route("/submit-schedule", methods=['POST'])
 def submit_schedule():
+    # (この関数に変更はありません)
     data = request.get_json()
     user_id = data.get('userId')
     salon_id = data.get('salonId')
@@ -228,6 +227,7 @@ def submit_schedule():
 
 @app.route("/trigger-offer", methods=['POST'])
 def trigger_offer():
+    # (この関数に変更はありません)
     data = request.get_json()
     if not data: return jsonify({"status": "error", "message": "No data provided"}), 400
     user_id = data.get('userId')
