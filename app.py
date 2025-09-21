@@ -22,19 +22,16 @@ from linebot.v3.messaging import (
     FlexMessage,
     FlexContainer
 )
-from linebot.v3.webhooks import MessageEvent, TextMessageContent
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, PostbackEvent
 
 app = Flask(__name__)
 CORS(app)
 
 # --- 認証設定 ---
-# RenderのSecret Fileから認証情報を読み込む最終版
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-# Secret FileのパスはRenderによって自動的に設定される
 creds_path = '/etc/secrets/google_credentials.json'
 creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
 client = gspread.authorize(creds)
-# --- 認証設定ここまで ---
 
 spreadsheet = client.open("店舗マスタ_LUMINA Offer用")
 user_management_sheet = spreadsheet.worksheet("ユーザー管理")
@@ -50,26 +47,30 @@ handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET'))
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
-
 def send_delayed_offer(user_id, user_wishes):
     try:
         ranked_ids, matched_salon, offer_text = find_and_generate_offer(user_wishes)
         
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
-            if not matched_salon:
-                message = TextMessage(text=offer_text)
-                line_bot_api.push_message(PushMessageRequest(to=user_id, messages=[message]))
-            else:
+
+            if matched_salon:
                 today_str = datetime.today().strftime('%Y/%m/%d')
-                offer_headers = offer_management_sheet.row_values(1)
-                offer_row_dict = dict(zip(offer_headers, [user_id, matched_salon.get('店舗ID'), today_str, '送信済み']))
-                new_offer_row = [offer_row_dict.get(h) for h in offer_headers]
-                offer_management_sheet.append_row(new_offer_row)
+                
+                offer_headers = ['ユーザーID', '店舗ID', 'オファー送信日', 'オファー状況']
+                initial_offer_data = {
+                    "ユーザーID": user_id,
+                    "店舗ID": matched_salon.get('店舗ID'),
+                    "オファー送信日": today_str,
+                    "オファー状況": "送信済み"
+                }
+                new_offer_row = [initial_offer_data.get(h, '') for h in offer_headers]
+                offer_management_sheet.append_row(new_offer_row, value_input_option='USER_ENTERED')
             
                 flex_container = FlexContainer.from_dict(create_salon_flex_message(matched_salon, offer_text))
                 messages = [FlexMessage(alt_text=f"{matched_salon['店舗名']}からのオファー", contents=flex_container)]
                 line_bot_api.push_message(PushMessageRequest(to=user_id, messages=messages))
+
     except Exception as e:
         print(f"遅延送信中のエラー: {e}")
 
@@ -146,7 +147,7 @@ def create_salon_flex_message(salon, offer_text):
     return {
         "type": "bubble", "hero": { "type": "image", "url": salon.get("画像URL", ""), "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
         "body": { "type": "box", "layout": "vertical", "contents": [ { "type": "text", "text": salon.get("店舗名", ""), "weight": "bold", "size": "xl" }, { "type": "box", "layout": "vertical", "margin": "lg", "spacing": "sm", "contents": [ { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "勤務地", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": salon.get("住所", ""), "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "募集役職", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": role, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "メッセージ", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": offer_text, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]} ]} ] },
-        "footer": { "type": "box", "layout": "vertical", "spacing": "sm", "contents": [ { "type": "button", "style": "link", "height": "sm", "action": { "type": "uri", "label": "詳しく見る", "uri": "https://example.com" }}, { "type": "button", "style": "primary", "height": "sm", "action": { "type": "postback", "label": "サロンから話を聞いてみる", "data": f"accept_offer&salon_id={salon.get('店舗ID')}" }, "color": "#FF6B6B"} ], "flex": 0 }
+        "footer": { "type": "box", "layout": "vertical", "spacing": "sm", "contents": [ { "type": "button", "style": "link", "height": "sm", "action": { "type": "uri", "label": "詳しく見る", "uri": "https://example.com" }}, { "type": "button", "style": "primary", "height": "sm", "action": { "type": "postback", "label": "サロンから話を聞いてみる", "data": f"action=accept_offer&salon_id={salon.get('店舗ID')}" }, "color": "#FF6B6B"} ], "flex": 0 }
     }
 
 def get_age_from_birthdate(birthdate):
@@ -170,6 +171,61 @@ def handle_message(event):
             ReplyMessageRequest(reply_token=event.reply_token, messages=[TextMessage(text="ご登録ありがとうございます。リッチメニューからプロフィールをご入力ください。")])
         )
 
+@handler.add(PostbackEvent)
+def handle_postback(event):
+    data_string = event.postback.data
+    params = dict(x.split('=') for x in data_string.split('&'))
+    action = params.get('action')
+    salon_id = params.get('salon_id')
+
+    if action == 'accept_offer':
+        # ★★★★★ ここにIDを設定 ★★★★★
+        liff_id = "2008066763-X5mxymoj" 
+        liff_url = f"https://liff.line.me/{liff_id}?salonId={salon_id}"
+
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            reply_message = TextMessage(text=liff_url)
+            
+            line_bot_api.reply_message(
+                ReplyMessageRequest(
+                    reply_token=event.reply_token,
+                    messages=[reply_message]
+                )
+            )
+
+@app.route("/submit-schedule", methods=['POST'])
+def submit_schedule():
+    data = request.get_json()
+    user_id = data.get('userId')
+    salon_id = data.get('salonId')
+    
+    try:
+        all_records = offer_management_sheet.get_all_records()
+        row_to_update = -1
+        for i, record in enumerate(all_records):
+            if record.get('ユーザーID') == user_id and str(record.get('店舗ID')) == str(salon_id):
+                row_to_update = i + 2
+                break
+        
+        if row_to_update != -1:
+            update_values = [
+                '日程調整中',
+                data['interviewMethod'],
+                data['date1'], data['startTime1'], data['endTime1'],
+                data['date2'], data['startTime2'], data['endTime2'],
+                data['date3'], data['startTime3'], data['endTime3']
+            ]
+            offer_management_sheet.update(f'D{row_to_update}:N{row_to_update}', [update_values])
+            return jsonify({"status": "success", "message": "Schedule submitted successfully"})
+        else:
+            print(f"該当のオファーが見つかりません。UserID: {user_id}, SalonID: {salon_id}")
+            return jsonify({"status": "error", "message": "Offer not found"}), 404
+
+    except Exception as e:
+        print(f"スプレッドシート更新エラー: {e}")
+        return jsonify({"status": "error", "message": "Failed to update spreadsheet"}), 500
+
 @app.route("/trigger-offer", methods=['POST'])
 def trigger_offer():
     data = request.get_json()
@@ -178,6 +234,21 @@ def trigger_offer():
     user_wishes = data.get('wishes')
     if not user_id or not user_wishes: return jsonify({"status": "error", "message": "Missing userId or wishes"}), 400
     
+    try:
+        with ApiClient(configuration) as api_client:
+            line_bot_api = MessagingApi(api_client)
+            welcome_message = (
+                "ご登録いただき、誠にありがとうございます！\n"
+                "LUMINA Offerが、あなたにプロフィールを拝見してピッタリな『好待遇サロンの公認オファー』を、このLINEアカウントを通じてご連絡いたします。\n"
+                "楽しみにお待ちください！"
+            )
+            line_bot_api.push_message(PushMessageRequest(
+                to=user_id,
+                messages=[TextMessage(text=welcome_message)]
+            ))
+    except Exception as e:
+        print(f"ウェルカムメッセージの送信エラー: {e}")
+
     if 'birthdate' in user_wishes and user_wishes['birthdate']:
         age = get_age_from_birthdate(user_wishes['birthdate'])
         user_wishes['age'] = f"{ (age // 10) * 10 }代"
