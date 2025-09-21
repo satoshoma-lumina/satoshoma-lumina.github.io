@@ -62,7 +62,6 @@ def send_delayed_offer(user_id, user_wishes):
                 line_bot_api.push_message(PushMessageRequest(to=user_id, messages=[message]))
             else:
                 today_str = datetime.today().strftime('%Y/%m/%d')
-                ids_str = ",".join(map(str, ranked_ids))
                 offer_headers = offer_management_sheet.row_values(1)
                 offer_row_dict = dict(zip(offer_headers, [user_id, matched_salon.get('店舗ID'), today_str, '送信済み']))
                 new_offer_row = [offer_row_dict.get(h) for h in offer_headers]
