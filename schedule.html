@@ -74,7 +74,6 @@
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script>
         async function main() {
-            // ★★★★★ ここにIDを設定 ★★★★★
             const liffId = "2008066763-X5mxymoj"; 
             try {
                 await liff.init({ liffId });
@@ -95,7 +94,6 @@
             const urlParams = new URLSearchParams(window.location.search);
             const salonId = urlParams.get('salonId');
 
-            // Salon Name: 現時点ではIDを表示。将来的にはAPIから取得を推奨
             document.getElementById('salon-name').textContent = `サロン(ID: ${salonId})`;
 
             const form = document.getElementById('scheduleForm');
@@ -131,9 +129,16 @@
                     });
 
                     if (response.ok) {
-                        // 次のステップ（アンケート）へ
-                        // alert("日程を承りました！次にアンケートへ進みます。"); // 将来的にここに次のLIFF URLへのリダイレクトを実装
-                        liff.closeWindow();
+                        // ★★★★★ ここからが変更点 ★★★★★
+                        const result = await response.json();
+                        if (result.nextLiffUrl) {
+                            // サーバーから受け取った次のLIFF URLに画面を遷移させる
+                            window.location.href = result.nextLiffUrl;
+                        } else {
+                            // nextLiffUrlがない場合は、念のためウィンドウを閉じる
+                            liff.closeWindow();
+                        }
+                        // ★★★★★ ここまでが変更点 ★★★★★
                     } else {
                         const errorData = await response.json();
                         throw new Error(errorData.message || 'サーバーエラーが発生しました。');

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>面談前アンケート</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f7f7f7; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; font-size: 22px; margin-bottom: 10px;}
+        p { text-align: center; margin-bottom: 25px; line-height: 1.6; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-weight: bold; margin-bottom: 8px; }
+        textarea { width: 100%; height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; box-sizing: border-box; resize: vertical; }
+        button {
+            width: 100%; padding: 15px; background-color: #FF6B6B; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 18px; font-weight: bold; margin-top: 20px;
+        }
+        #loading, #error { text-align: center; margin-top: 15px; display: none; } #error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>面談前アンケート</h1>
+        <p>より良いご提案のため、あなたの価値観について少しだけ教えてください。</p>
+        
+        <form id="questionnaireForm">
+            <div class="form-group">
+                <label for="q1">Q1. 今の職場で、最も改善されたら嬉しい点は何ですか？</label>
+                <textarea id="q1" name="q1" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="q2">Q2. サロン選びで、あなたが最も重要視するポイントを3つ教えてください。</label>
+                <textarea id="q2" name="q2" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="q3">Q3. どのような美容師、どのような人間になっていきたいですか？</label>
+                <textarea id="q3" name="q3" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="q4">Q4. 最も得意な技術や施術は何ですか？</label>
+                <textarea id="q4" name="q4" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="q5">Q5. 逆に、少し苦手な技術や施術があれば教えてください。</label>
+                <textarea id="q5" name="q5"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="q6">Q6. どのようなお客様を担当するのが好きですか？（年齢層、性別、スタイルなど）</label>
+                <textarea id="q6" name="q6" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="q7">Q7. 希望する年収や、働き方の理想があれば教えてください。</label>
+                <textarea id="q7" name="q7" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="q8">Q8. 3年後、5年後のキャリアプランについて、現時点での考えを教えてください。</label>
+                <textarea id="q8" name="q8"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="q9">Q9. その他、キャリアについて不安なことや、アドバイザーに伝えておきたいことはありますか？</label>
+                <textarea id="q9" name="q9"></textarea>
+            </div>
+            <button type="submit" id="submit-button">アンケートを送信する</button>
+        </form>
+        <div id="loading">送信中...</div>
+        <div id="error"></div>
+    </div>
+
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script>
+        async function main() {
+            const liffId = "2008066763-JAkGQkmw"; 
+            await liff.init({ liffId });
+
+            if (!liff.isLoggedIn()) { liff.login(); return; }
+
+            const profile = await liff.getProfile();
+            const userId = profile.userId;
+
+            document.getElementById('questionnaireForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('error').style.display = 'none';
+                document.getElementById('submit-button').disabled = true;
+
+                const formData = new FormData(e.target);
+                const answers = { userId };
+                for (const [key, value] of formData.entries()) {
+                    answers[key] = value;
+                }
+
+                const endpointUrl = "https://lumina-offer-bot.onrender.com/submit-questionnaire";
+                
+                try {
+                    const response = await fetch(endpointUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(answers)
+                    });
+                    if (response.ok) {
+                        // 次のステップ（ミッション3）へ
+                        alert("ご協力ありがとうございました！"); // 将来的にミッション3のLIFFに遷移させる
+                        liff.closeWindow();
+                    } else {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message || 'サーバーエラー');
+                    }
+                } catch (error) {
+                    document.getElementById('error').textContent = `送信に失敗しました: ${error.message}`;
+                    document.getElementById('error').style.display = 'block';
+                } finally {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('submit-button').disabled = false;
+                }
+            });
+        }
+        main();
+    </script>
+</body>
+</html>
