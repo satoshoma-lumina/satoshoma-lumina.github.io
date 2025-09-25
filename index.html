@@ -11,50 +11,27 @@
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; color: #555; font-weight: bold; }
         input[type="text"], input[type="date"], input[type="tel"], select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-            font-size: 16px;
-        }
-        input:focus, select:focus {
-            border-color: #b4d1f7;
-            outline: none;
-            box-shadow: 0 0 0 2px rgba(180, 209, 247, 0.5);
+            width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px;
         }
         button {
-            width: 100%;
-            padding: 12px;
-            background-color: #b4d1f7; /* ブランドカラーを適用 */
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: bold;
+            width: 100%; padding: 12px; background-color: #FF6B6B; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold;
         }
-        button:hover { background-color: #9cbde0; } /* ホバー時の色を少し濃く */
-        #loading, #error { text-align: center; margin-top: 15px; display: none; }
-        #error { color: red; }
+        #loading, #error { text-align: center; margin-top: 15px; display: none; } #error { color: red; }
     </style>
 </head>
 <body>
-
     <div class="container">
         <h1>プロフィール登録</h1>
         <form id="profileForm">
             <div class="form-group">
                 <label for="full_name">名前（フルネーム）</label>
-                <input type="text" id="full_name" name="full_name" placeholder="例: 山田 太郎" required>
+                <input type="text" id="full_name" name="full_name" required>
             </div>
             <div class="form-group">
                 <label for="gender">性別</label>
                 <select id="gender" name="gender" required>
                     <option value="">選択してください</option>
-                    <option value="男性">男性</option>
-                    <option value="女性">女性</option>
-                    <option value="その他">その他</option>
+                    <option value="男性">男性</option> <option value="女性">女性</option> <option value="その他">その他</option>
                 </select>
             </div>
             <div class="form-group">
@@ -63,12 +40,20 @@
             </div>
             <div class="form-group">
                 <label for="phone_number">電話番号</label>
-                <input type="tel" id="phone_number" name="phone_number" placeholder="例: 09012345678" required>
+                <input type="tel" id="phone_number" name="phone_number" required>
+            </div>
+            <div class="form-group">
+                <label for="license">美容師免許</label>
+                <select id="license" name="license" required>
+                    <option value="">選択してください</option>
+                    <option value="取得済み">取得済み</option>
+                    <option value="未取得（学生・通信含む）">未取得（学生・通信含む）</option>
+                </select>
             </div>
             <div class="form-group">
                 <label for="mbti">MBTI</label>
                 <select id="mbti" name="mbti" required>
-                    <option value="">選択してください</option>
+                     <option value="">選択してください</option>
                     <option value="ISTJ">ISTJ</option> <option value="ISFJ">ISFJ</option> <option value="INFJ">INFJ</option> <option value="INTJ">INTJ</option>
                     <option value="ISTP">ISTP</option> <option value="ISFP">ISFP</option> <option value="INFP">INFP</option> <option value="INTP">INTP</option>
                     <option value="ESTP">ESTP</option> <option value="ESFP">ESFP</option> <option value="ENFP">ENFP</option> <option value="ENTP">ENTP</option>
@@ -88,7 +73,7 @@
             </div>
             <div class="form-group">
                 <label for="area">希望勤務地</label>
-                <input type="text" id="area" name="area" placeholder="例: 新宿周辺, 埼玉エリア" required>
+                <input type="text" id="area" name="area" required>
             </div>
             <div class="form-group">
                 <label for="satisfaction">現在の職場満足度</label>
@@ -138,25 +123,20 @@
                     <option value="まだ考え中">まだ考え中</option>
                 </select>
             </div>
-
             <button type="submit">登録する</button>
         </form>
         <div id="loading">送信中...</div>
         <div id="error"></div>
     </div>
-
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script>
         async function main() {
-            const liffId = "2008066763-ZJ72p7OJ";
+            const liffId = "2008066763-ZJ72p7OJ"; // これは初回登録フォームの既存のLIFF ID
             const endpointUrl = "https://lumina-offer-bot.onrender.com/trigger-offer";
 
             try {
                 await liff.init({ liffId: liffId });
-                if (!liff.isLoggedIn()) {
-                    liff.login();
-                    return;
-                }
+                if (!liff.isLoggedIn()) { liff.login(); return; }
                 const profile = await liff.getProfile();
                 const userId = profile.userId;
                 const form = document.getElementById('profileForm');
@@ -166,35 +146,23 @@
                     document.getElementById('error').style.display = 'none';
                     const formData = new FormData(form);
                     const wishes = {};
-                    for (const [key, value] of formData.entries()) {
-                        wishes[key] = value;
-                    }
-                    const payload = {
-                        userId: userId,
-                        wishes: wishes
-                    };
+                    for (const [key, value] of formData.entries()) { wishes[key] = value; }
+                    const payload = { userId: userId, wishes: wishes };
                     try {
                         const response = await fetch(endpointUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', },
-                            body: JSON.stringify(payload),
+                            method: 'POST', headers: { 'Content-Type': 'application/json', }, body: JSON.stringify(payload),
                         });
-                        if (response.ok) {
-                            liff.closeWindow();
-                        } else {
-                            const errorData = await response.json();
-                            throw new Error(errorData.message || 'サーバーでエラーが発生しました。');
-                        }
+                        if (response.ok) { liff.closeWindow(); } 
+                        else { throw new Error('サーバーエラー'); }
                     } catch (error) {
-                        document.getElementById('error').textContent = `送信に失敗しました: ${error.message}`;
+                        document.getElementById('error').textContent = `送信に失敗しました。`;
                         document.getElementById('error').style.display = 'block';
                     } finally {
                         document.getElementById('loading').style.display = 'none';
                     }
                 });
             } catch (error) {
-                console.error(error);
-                document.getElementById('error').textContent = `LIFFの初期化に失敗しました: ${error.message}`;
+                document.getElementById('error').textContent = `初期化に失敗しました。`;
                 document.getElementById('error').style.display = 'block';
             }
         }
