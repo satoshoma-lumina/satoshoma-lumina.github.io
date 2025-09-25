@@ -70,25 +70,40 @@ def process_and_send_offer(user_id, user_wishes):
                 flex_container = FlexContainer.from_dict(create_salon_flex_message(matched_salon, offer_text))
                 messages = [FlexMessage(alt_text=f"{matched_salon['店舗名']}からのオファー", contents=flex_container)]
                 line_bot_api.push_message(PushMessageRequest(to=user_id, messages=messages))
+                print("--- DEBUG: オファー送信完了 ---")
+            else:
+                print("--- DEBUG: 最終的にマッチするサロンがなかったため、オファーは送信されませんでした ---")
 
     except Exception as e:
-        print(f"オファー送信中のエラー: {e}")
+        print(f"--- DEBUG: オファー送信中のエラー: {e} ---")
 
 def find_and_generate_offer(user_wishes):
+    print("\n--- DEBUG: マッチング処理を開始します ---")
+    
     all_salons_data = salon_master_sheet.get_all_records()
-    if not all_salons_data: return None, None, "サロン情報が見つかりません。"
+    if not all_salons_data: 
+        print("--- DEBUG: エラー: サロン情報が見つかりません。 ---")
+        return None, None, "サロン情報が見つかりません。"
 
     salons_df = pd.DataFrame(all_salons_data)
+    print(f"--- DEBUG: 読み込んだサロン数: {len(salons_df)}件 ---")
     
     try:
+        user_area = user_wishes.get("area", "")
+        print(f"--- DEBUG: ユーザーの希望勤務地: '{user_area}' ---")
         geolocator = Nominatim(user_agent="lumina_offer_geocoder")
-        location = geolocator.geocode(user_wishes.get("area", ""), timeout=10)
-        if not location:
-            print(f"ジオコーディング失敗: {user_wishes.get('area')}")
+        location = geolocator.geocode(user_area, timeout=10)
+        
+        if location:
+            print(f"--- DEBUG: ジオコーディング成功: {location.address} ---")
+            print(f"--- DEBUG: 緯度={location.latitude}, 経度={location.longitude} ---")
+        else:
+            print("--- DEBUG: ★★★ ジオコーディング失敗: location is None ★★★ ---")
             return None, None, "希望勤務地の位置情報を特定できませんでした。"
+        
         user_coords = (location.latitude, location.longitude)
     except Exception as e:
-        print(f"ジオコーディング中にエラーが発生: {e}")
+        print(f"--- DEBUG: ★★★ ジオコーディング中にエラー: {e} ★★★ ---")
         return None, None, "位置情報取得中にエラーが発生しました。"
 
     salons_df['緯度'] = pd.to_numeric(salons_df['緯度'], errors='coerce')
@@ -99,12 +114,15 @@ def find_and_generate_offer(user_wishes):
     
     salons_df['距離'] = distances
     nearby_salons = salons_df[salons_df['距離'] <= 25].copy()
+    print(f"--- DEBUG: 25km圏内のサロン数: {len(nearby_salons)}件 ---")
     if nearby_salons.empty: return None, None, "希望勤務地の25km以内に条件に合うサロンが見つかりませんでした。"
     
     user_role = user_wishes.get("role")
     user_license = user_wishes.get("license")
+    print(f"--- DEBUG: ユーザーの希望役職: '{user_role}', 免許: '{user_license}' ---")
 
     salons_to_consider = nearby_salons[nearby_salons['募集状況'] == '募集中']
+    print(f"--- DEBUG: 「募集中」で絞り込み後: {len(salons_to_consider)}件 ---")
     if salons_to_consider.empty: return None, None, "募集中のサロンがありません。"
 
     def role_matcher(salon_roles):
@@ -112,13 +130,17 @@ def find_and_generate_offer(user_wishes):
         return user_role in roles_list
 
     salons_to_consider = salons_to_consider[salons_to_consider['役職'].apply(role_matcher)]
+    print(f"--- DEBUG: 「役職」で絞り込み後: {len(salons_to_consider)}件 ---")
     if salons_to_consider.empty: return None, None, "役職に合うサロンがありません。"
 
     if user_license == "取得済み":
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'] == '取得']
     else: 
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'].isin(['取得', '未取得'])]
+    print(f"--- DEBUG: 「免許」で絞り込み後: {len(salons_to_consider)}件 ---")
     if salons_to_consider.empty: return None, None, "免許条件に合うサロンがありません。"
+    
+    print(f"--- DEBUG: 全てのフィルタリング完了。{len(salons_to_consider)}件のサロンをGeminiに送信します。 ---")
     
     salons_json_string = salons_to_consider.to_json(orient='records', force_ascii=False)
 
@@ -169,8 +191,8 @@ def find_and_generate_offer(user_wishes):
         
         return ranked_ids, matched_salon_info, first_offer_message
     except Exception as e:
-        print(f"Geminiからの応答解析エラー: {e}")
-        print(f"Geminiからの元テキスト: {response.text}")
+        print(f"--- DEBUG: Geminiからの応答解析エラー: {e} ---")
+        print(f"--- DEBUG: Geminiからの元テキスト: {response.text}")
         return None, None, "最適なサロンが見つかりませんでした。"
 
 def create_salon_flex_message(salon, offer_text):
