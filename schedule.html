@@ -17,8 +17,8 @@
         .date-group strong { display: block; margin-bottom: 10px; }
         .time-inputs { display: flex; align-items: center; gap: 10px; }
         .time-inputs span { font-weight: bold; }
-        input[type="date"], input[type="time"] {
-            width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px;
+        input[type="date"], select {
+            width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 16px; background-color: #fff;
         }
         button {
             width: 100%; padding: 15px; background-color: #FF6B6B; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 18px; font-weight: bold; margin-top: 20px;
@@ -47,24 +47,30 @@
                     <strong>第1希望</strong>
                     <input type="date" name="date1" required>
                     <div class="time-inputs">
-                        <input type="time" name="startTime1" step="1800" required> <span>〜</span> <input type="time" name="endTime1" step="1800" required>
+                        <select name="startTime1" required></select>
+                        <span>〜</span>
+                        <select name="endTime1" required></select>
                     </div>
                 </div>
                 <div class="date-group">
                     <strong>第2希望</strong>
                     <input type="date" name="date2">
                     <div class="time-inputs">
-                        <input type="time" name="startTime2" step="1800"> <span>〜</span> <input type="time" name="endTime2" step="1800">
+                        <select name="startTime2"></select>
+                        <span>〜</span>
+                        <select name="endTime2"></select>
                     </div>
                 </div>
                 <div class="date-group">
                     <strong>第3希望</strong>
                     <input type="date" name="date3">
                     <div class="time-inputs">
-                        <input type="time" name="startTime3" step="1800"> <span>〜</span> <input type="time" name="endTime3" step="1800">
+                        <select name="startTime3"></select>
+                        <span>〜</span>
+                        <select name="endTime3"></select>
                     </div>
                 </div>
-            </div>
+                </div>
             <button type="submit" id="submit-button">次のアンケートに進む</button>
         </form>
         <div id="loading">送信中...</div>
@@ -73,7 +79,28 @@
 
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script>
+        // ★★★★★ ここからがJavaScriptの変更点 ★★★★★
+        // 時間選択のプルダウンを生成する関数
+        function populateTimeSelects() {
+            const timeSelects = document.querySelectorAll('select[name^="startTime"], select[name^="endTime"]');
+            let options = '<option value="">--:--</option>';
+            for (let h = 9; h <= 21; h++) {
+                for (let m = 0; m < 60; m += 30) {
+                    const hour = String(h).padStart(2, '0');
+                    const minute = String(m).padStart(2, '0');
+                    const timeValue = `${hour}:${minute}`;
+                    options += `<option value="${timeValue}">${timeValue}</option>`;
+                }
+            }
+            timeSelects.forEach(select => {
+                select.innerHTML = options;
+            });
+        }
+
         async function main() {
+            populateTimeSelects(); // 時間の選択肢を生成
+
+            // (以降のmain関数の中身は変更ありません)
             const liffId = "2008066763-X5mxymoj"; 
             try {
                 await liff.init({ liffId });
@@ -93,8 +120,6 @@
 
             const urlParams = new URLSearchParams(window.location.search);
             const salonId = urlParams.get('salonId');
-
-            // ★変更点⑤：サロンIDを表示するロジックを削除
 
             const form = document.getElementById('scheduleForm');
             form.addEventListener('submit', async (e) => {
@@ -149,6 +174,7 @@
             });
         }
         main();
+        // ★★★★★ ここまでがJavaScriptの変更点 ★★★★★
     </script>
 </body>
 </html>

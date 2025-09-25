@@ -5,65 +5,124 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>面談前アンケート</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f7f7f7; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #333; font-size: 22px; margin-bottom: 10px;}
-        p { text-align: center; margin-bottom: 25px; line-height: 1.6; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f7f7f7; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { text-align: center; color: #333; }
+        h1 { font-size: 22px; }
+        h2 { font-size: 14px; font-weight: normal; color: #666; margin-top: -10px; margin-bottom: 25px; }
+        .form-section { margin-bottom: 30px; }
+        .form-section-title { font-size: 12px; color: #FF6B6B; font-weight: bold; margin-bottom: 15px; text-align: center; }
         .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; font-weight: bold; margin-bottom: 8px; }
-        textarea { width: 100%; height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; box-sizing: border-box; resize: vertical; }
-        button {
-            width: 100%; padding: 15px; background-color: #FF6B6B; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 18px; font-weight: bold; margin-top: 20px;
-        }
+        label { display: block; font-weight: bold; margin-bottom: 8px; font-size: 15px; }
+        input[type="text"], select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 16px; box-sizing: border-box; }
+        .checkbox-group label, .radio-group label { font-weight: normal; display: block; margin-bottom: 10px; }
+        .checkbox-group input, .radio-group input { margin-right: 8px; }
+        button { width: 100%; padding: 15px; background-color: #FF6B6B; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 18px; font-weight: bold; margin-top: 20px; }
         #loading, #error { text-align: center; margin-top: 15px; display: none; } #error { color: red; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>面談前アンケート</h1>
-        <p>より良いご提案のため、あなたの価値観について少しだけ教えてください。</p>
+        <h2>より良いご提案のため、あなたの現在・未来・価値観について少しだけ教えてください。</h2>
         
         <form id="questionnaireForm">
-            <div class="form-group">
-                <label for="q1">Q1. 今の職場で、最も改善されたら嬉しい点は何ですか？</label>
-                <textarea id="q1" name="q1" required></textarea>
+            <div class="form-section">
+                <p class="form-section-title">Step 1/3：あなたご自身について</p>
+                <div class="form-group">
+                    <label for="q1_area">1. お住まいのエリア（駅や市区町村）</label>
+                    <input type="text" id="q1_area" name="q1_area" placeholder="例：新宿駅、世田谷区" required>
+                </div>
+                <div class="form-group">
+                    <label for="q2_job_changes">2. 今までの転職回数</label>
+                    <select id="q2_job_changes" name="q2_job_changes" required>
+                        <option value="">選択してください</option>
+                        <option value="0回">0回</option>
+                        <option value="1回">1回</option>
+                        <option value="2回">2回</option>
+                        <option value="3回">3回</option>
+                        <option value="4回以上">4回以上</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>3. 現在の雇用形態</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="q3_current_employment" value="正社員" required> 正社員</label>
+                        <label><input type="radio" name="q3_current_employment" value="業務委託"> 業務委託</label>
+                        <label><input type="radio" name="q3_current_employment" value="パート・アルバイト"> パート・アルバイト</label>
+                        <label><input type="radio" name="q3_current_employment" value="その他"> その他</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="q4_experience_years" id="q4_label">4. 現在の役職でのご経験年数</label>
+                    <select id="q4_experience_years" name="q4_experience_years" required>
+                        <option value="">選択してください</option>
+                        <option value="1年未満">1年未満</option>
+                        <option value="1年">1年</option>
+                        <option value="2年">2年</option>
+                        <option value="3年">3年</option>
+                        <option value="4年">4年</option>
+                        <option value="5年">5年</option>
+                        <option value="6年以上">6年以上</option>
+                    </select>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="q2">Q2. サロン選びで、あなたが最も重要視するポイントを3つ教えてください。</label>
-                <textarea id="q2" name="q2" required></textarea>
+
+            <div class="form-section">
+                <p class="form-section-title">Step 2/3：あなたの未来について</p>
+                <div class="form-group">
+                    <label>5. 今後の希望雇用形態</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="q5_desired_employment" value="正社員を希望" required> 正社員を希望</label>
+                        <label><input type="radio" name="q5_desired_employment" value="業務委託を希望"> 業務委託を希望</label>
+                        <label><input type="radio" name="q5_desired_employment" value="こだわらない"> こだわらない</label>
+                        <label><input type="radio" name="q5_desired_employment" value="その他"> その他</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>6. サロン選びで、あなたが最も重要視するポイントを教えてください。（最大3つ）</label>
+                    <div class="checkbox-group">
+                        <label><input type="checkbox" name="q6_priorities" value="高い給与水準・インセンティブ"> 高い給与水準・インセンティブ</label>
+                        <label><input type="checkbox" name="q6_priorities" value="完全週休2日・プライベートとの両立"> 完全週休2日・プライベートとの両立</label>
+                        <label><input type="checkbox" name="q6_priorities" value="スタッフ同士の良好な関係性"> スタッフ同士の良好な関係性</label>
+                        <label><input type="checkbox" name="q6_priorities" value="新規・フリー客への入客チャンスの多さ"> 新規・フリー客への入客チャンスの多さ</label>
+                        <label><input type="checkbox" name="q6_priorities" value="最新技術が学べる・研修制度の充実"> 最新技術が学べる・研修制度の充実</label>
+                        <label><input type="checkbox" name="q6_priorities" value="店舗のブランド力・デザイン性"> 店舗のブランド力・デザイン性</label>
+                        <label><input type="checkbox" name="q6_priorities" value="オーナーや経営者のビジョンへの共感"> オーナーや経営者のビジョンへの共感</label>
+                        <label><input type="checkbox" name="q6_priorities" value="その他"> その他</label>
+                    </div>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="q3">Q3. どのような美容師、どのような人間になっていきたいですか？</label>
-                <textarea id="q3" name="q3" required></textarea>
+
+            <div class="form-section">
+                <p class="form-section-title">Step 3/3：あなたの価値観について</p>
+                <div class="form-group">
+                    <label>7. 今の職場で、最も改善されたら嬉しい点は何ですか？</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="q7_improvement_point" value="給与・評価制度" required> 給与・評価制度</label>
+                        <label><input type="radio" name="q7_improvement_point" value="休日・勤務時間"> 休日・勤務時間</label>
+                        <label><input type="radio" name="q7_improvement_point" value="人間関係・職場の雰囲気"> 人間関係・職場の雰囲気</label>
+                        <label><input type="radio" name="q7_improvement_point" value="集客力・入客機会"> 集客力・入客機会</label>
+                        <label><input type="radio" name="q7_improvement_point" value="技術を学べる環境・キャリアパス"> 技術を学べる環境・キャリアパス</label>
+                        <label><input type="radio" name="q7_improvement_point" value="経営方針・会社の将来性"> 経営方針・会社の将来性</label>
+                        <label><input type="radio" name="q7_improvement_point" value="その他"> その他</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>8. どのような美容師、どのような人間になっていきたいですか？</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="q8_ideal_beautician" value="とにかく技術を極めたい（スペシャリスト志向）" required> とにかく技術を極めたい（スペシャリスト志向）</label>
+                        <label><input type="radio" name="q8_ideal_beautician" value="店長やマネージャーを目指したい（マネジメント志向）"> 店長やマネージャーを目指したい（マネジメント志向）</label>
+                        <label><input type="radio" name="q8_ideal_beautician" value="将来、自分の店を持ちたい（独立志向）"> 将来、自分の店を持ちたい（独立志向）</label>
+                        <label><input type="radio" name="q8_ideal_beautician" value="プライベートと両立して長く働きたい（安定志向）"> プライベートと両立して長く働きたい（安定志向）</label>
+                        <label><input type="radio" name="q8_ideal_beautician" value="フリーランスとして自由に活躍したい（自由志向）"> フリーランスとして自由に活躍したい（自由志向）</label>
+                        <label><input type="radio" name="q8_ideal_beautician" value="まだ具体的には決まっていない"> まだ具体的には決まっていない</label>
+                    </div>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="q4">Q4. 最も得意な技術や施術は何ですか？</label>
-                <textarea id="q4" name="q4" required></textarea>
-            </div>
-            <div class="form-group">
-                <label for="q5">Q5. 逆に、少し苦手な技術や施術があれば教えてください。</label>
-                <textarea id="q5" name="q5"></textarea>
-            </div>
-            <div class="form-group">
-                <label for="q6">Q6. どのようなお客様を担当するのが好きですか？（年齢層、性別、スタイルなど）</label>
-                <textarea id="q6" name="q6" required></textarea>
-            </div>
-            <div class="form-group">
-                <label for="q7">Q7. 希望する年収や、働き方の理想があれば教えてください。</label>
-                <textarea id="q7" name="q7" required></textarea>
-            </div>
-            <div class="form-group">
-                <label for="q8">Q8. 3年後、5年後のキャリアプランについて、現時点での考えを教えてください。</label>
-                <textarea id="q8" name="q8"></textarea>
-            </div>
-            <div class="form-group">
-                <label for="q9">Q9. その他、キャリアについて不安なことや、アドバイザーに伝えておきたいことはありますか？</label>
-                <textarea id="q9" name="q9"></textarea>
-            </div>
+            
             <button type="submit" id="submit-button">アンケートを送信する</button>
         </form>
-        <div id="loading">送信中...</div>
-        <div id="error"></div>
     </div>
 
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -77,16 +136,41 @@
             const profile = await liff.getProfile();
             const userId = profile.userId;
 
+            // ユーザーの役職に応じて質問4のラベルを変更
+            const context = liff.getContext();
+            if (context && context.accessToken) {
+                // ここでサーバーに問い合わせて初回登録時の役職を取得するのが理想
+                // 今回は仮で「スタイリスト歴」と表示
+                // document.getElementById('q4_label').textContent = `4. スタイリスト歴`;
+            }
+
+            // チェックボックスの選択を3つまでに制限
+            const checkboxes = document.querySelectorAll('input[name="q6_priorities"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', () => {
+                    const checkedCount = document.querySelectorAll('input[name="q6_priorities"]:checked').length;
+                    if (checkedCount > 3) {
+                        alert('3つまで選択可能です。');
+                        checkbox.checked = false;
+                    }
+                });
+            });
+
             document.getElementById('questionnaireForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
-                document.getElementById('loading').style.display = 'block';
-                document.getElementById('error').style.display = 'none';
-                document.getElementById('submit-button').disabled = true;
-
+                
                 const formData = new FormData(e.target);
                 const answers = { userId };
+                
+                // 複数選択可能なチェックボックスのデータをカンマ区切りで結合
+                const priorities = Array.from(formData.getAll('q6_priorities')).join(',');
+                answers['q6_priorities'] = priorities;
+
+                // 他のデータを格納
                 for (const [key, value] of formData.entries()) {
-                    answers[key] = value;
+                    if (key !== 'q6_priorities') {
+                        answers[key] = value;
+                    }
                 }
 
                 const endpointUrl = "https://lumina-offer-bot.onrender.com/submit-questionnaire";
@@ -98,19 +182,12 @@
                         body: JSON.stringify(answers)
                     });
                     if (response.ok) {
-                        // 次のステップ（ミッション3）へ
-                        alert("ご協力ありがとうございました！"); // 将来的にミッション3のLIFFに遷移させる
                         liff.closeWindow();
                     } else {
-                        const errorData = await response.json();
-                        throw new Error(errorData.message || 'サーバーエラー');
+                        throw new Error('サーバーエラー');
                     }
                 } catch (error) {
-                    document.getElementById('error').textContent = `送信に失敗しました: ${error.message}`;
-                    document.getElementById('error').style.display = 'block';
-                } finally {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('submit-button').disabled = false;
+                    // エラー処理
                 }
             });
         }

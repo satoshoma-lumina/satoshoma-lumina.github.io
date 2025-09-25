@@ -4,14 +4,14 @@ import gspread
 import pandas as pd
 import google.generativeai as genai
 import re
-import time
-import threading
 from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 from flask import Flask, request, abort, jsonify
 from flask_cors import CORS
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
@@ -29,9 +29,10 @@ from linebot.v3.webhooks import MessageEvent, TextMessageContent
 app = Flask(__name__)
 CORS(app)
 
-# --- LIFF ID定義 ---
+# --- 定数定義 ---
 SCHEDULE_LIFF_ID = "2008066763-X5mxymoj"
 QUESTIONNAIRE_LIFF_ID = "2008066763-JAkGQkmw"
+SATO_EMAIL = "sato@lumina-beauty.co.jp"
 
 # --- 認証設定 ---
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -51,6 +52,28 @@ handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET'))
 # Gemini API
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
+
+
+# ★★★★★ 新機能：SendGridメール通知関数 ★★★★★
+def send_notification_email(subject, body):
+    from_email = os.environ.get('MAIL_USERNAME')
+    api_key = os.environ.get('SENDGRID_API_KEY')
+    
+    if not from_email or not api_key:
+        print("メール送信用の環境変数（MAIL_USERNAME or SENDGRID_API_KEY）が設定されていません。")
+        return
+
+    message = Mail(
+        from_email=from_email,
+        to_emails=SATO_EMAIL,
+        subject=subject,
+        html_content=body.replace('\n', '<br>'))
+    try:
+        sg = SendGridAPIClient(api_key)
+        response = sg.send(message)
+        print(f"メール送信成功: Status Code {response.status_code}")
+    except Exception as e:
+        print(f"メール送信エラー: {e}")
 
 def process_and_send_offer(user_id, user_wishes):
     try:
@@ -208,13 +231,10 @@ def create_salon_flex_message(salon, offer_text):
                     { "type": "text", "text": offer_text, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]} 
             ]} 
         ]},
-        # ★★★★★ ここからが変更点 ★★★★★
         "footer": { "type": "box", "layout": "vertical", "spacing": "sm", "contents": [ 
-            # 「詳しく見る」ボタンを復活させる
             { "type": "button", "style": "link", "height": "sm", "action": { "type": "uri", "label": "詳しく見る", "uri": "https://example.com" }}, 
             { "type": "button", "style": "primary", "height": "sm", "action": { "type": "uri", "label": "サロンから話を聞いてみる", "uri": liff_url }, "color": "#FF6B6B"} 
         ], "flex": 0 }
-        # ★★★★★ ここまでが変更点 ★★★★★
     }
 
 def get_age_from_birthdate(birthdate):
@@ -262,6 +282,20 @@ def submit_schedule():
             ]
             offer_management_sheet.update(f'D{row_to_update}:N{row_to_update}', [update_values])
             
+            subject = "【LUMINAオファー】面談日程の新規登録がありました"
+            body = f"""
+            以下の内容で、ユーザーから面談希望日時の登録がありました。
+            速やかにサロンとの日程調整を開始してください。
+
+            ■ ユーザーID: {user_id}
+            ■ サロンID: {salon_id}
+            ■ 希望の面談方法: {data['interviewMethod']}
+            ■ 第1希望: {data['date1']} {data['startTime1']}〜{data['endTime1']}
+            ■ 第2希望: {data.get('date2', '')} {data.get('startTime2', '')}〜{data.get('endTime2', '')}
+            ■ 第3希望: {data.get('date3', '')} {data.get('startTime3', '')}〜{data.get('endTime3', '')}
+            """
+            send_notification_email(subject, body)
+            
             next_liff_url = f"https://liff.line.me/{QUESTIONNAIRE_LIFF_ID}"
             return jsonify({ "status": "success", "message": "Schedule submitted successfully", "nextLiffUrl": next_liff_url })
         else:
@@ -281,11 +315,30 @@ def submit_questionnaire():
             row_to_update = cell.row
             
             update_values = [
-                data.get('q1', ''), data.get('q2', ''), data.get('q3', ''),
-                data.get('q4', ''), data.get('q5', ''), data.get('q6', ''),
-                data.get('q7', ''), data.get('q8', ''), data.get('q9', '')
+                data.get('q1_area'), data.get('q2_job_changes'), data.get('q3_current_employment'),
+                data.get('q4_experience_years'), data.get('q5_desired_employment'),
+                data.get('q6_priorities'), data.get('q7_improvement_point'),
+                data.get('q8_ideal_beautician')
             ]
-            user_management_sheet.update(f'Q{row_to_update}:Y{row_to_update}', [update_values])
+            user_management_sheet.update(f'Q{row_to_update}:X{row_to_update}', [update_values])
+            
+            user_name = user_management_sheet.cell(row_to_update, 4).value
+            subject = f"【LUMINAオファー】{user_name}様からアンケート回答がありました"
+            body = f"""
+            {user_name}様（ユーザーID: {user_id}）から、面談前アンケートへの回答がありました。
+            内容を確認し、面談の準備を進めてください。
+
+            ---
+            1. お住まいエリア: {data.get('q1_area')}
+            2. 転職回数: {data.get('q2_job_changes')}
+            3. 現雇用形態: {data.get('q3_current_employment')}
+            4. 現役職経験年数: {data.get('q4_experience_years')}
+            5. 希望雇用形態: {data.get('q5_desired_employment')}
+            6. サロン選びの重視点: {data.get('q6_priorities')}
+            7. 現職場の改善点: {data.get('q7_improvement_point')}
+            8. 理想の美容師像: {data.get('q8_ideal_beautician')}
+            """
+            send_notification_email(subject, body)
             
             return jsonify({"status": "success", "message": "Questionnaire submitted successfully"})
         else:
@@ -321,8 +374,7 @@ def trigger_offer():
             "ユーザーID": user_id, "登録日": datetime.today().strftime('%Y/%m/%d'), "ステータス": 'オファー中',
             "氏名": user_wishes.get('full_name'), "性別": user_wishes.get('gender'), "生年月日": user_wishes.get('birthdate'),
             "電話番号": user_wishes.get('phone_number'), "MBTI": user_wishes.get('mbti'), "役職": user_wishes.get('role'),
-            "希望エリア": user_wishes.get('area_prefecture'),
-            "希望勤務地": user_wishes.get('area_detail'),
+            "希望エリア": user_wishes.get('area_prefecture'), "希望勤務地": user_wishes.get('area_detail'),
             "職場満足度": user_wishes.get('satisfaction'), "興味のある待遇": user_wishes.get('perk'),
             "現在の状況": user_wishes.get('current_status'), "転職希望時期": user_wishes.get('timing'), "美容師免許": user_wishes.get('license')
         }
@@ -331,10 +383,10 @@ def trigger_offer():
         
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
-            range_to_update = f'A{cell.row}:{chr(ord("A") + len(profile_row_values) - 1)}{cell.row}'
+            range_to_update = f'A{cell.row}:P{cell.row}'
             user_management_sheet.update(range_to_update, [profile_row_values])
         else:
-            full_row = profile_row_values + [''] * 9 
+            full_row = profile_row_values + [''] * 8
             user_management_sheet.append_row(full_row)
     except Exception as e:
         print(f"ユーザー管理シートへの書き込みエラー: {e}")
