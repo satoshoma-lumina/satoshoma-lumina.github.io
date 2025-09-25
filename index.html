@@ -71,9 +71,23 @@
                     <option value="マネージャー以上">マネージャー以上</option>
                 </select>
             </div>
+
             <div class="form-group">
-                <label for="area">希望勤務地</label>
-                <input type="text" id="area" name="area" required>
+                <label for="area_prefecture">希望エリア（都道府県）</label>
+                <select id="area_prefecture" name="area_prefecture" required>
+                    <option value="">選択してください</option>
+                    <option value="東京都">東京都</option>
+                    <option value="神奈川県">神奈川県</option>
+                    <option value="埼玉県">埼玉県</option>
+                    <option value="千葉県">千葉県</option>
+                    <option value="茨城県">茨城県</option>
+                    <option value="栃木県">栃木県</option>
+                    <option value="群馬県">群馬県</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="area_detail">希望勤務地（駅名、市区町村など）</label>
+                <input type="text" id="area_detail" name="area_detail" placeholder="例：渋谷駅、新宿区、横浜市" required>
             </div>
             <div class="form-group">
                 <label for="satisfaction">現在の職場満足度</label>
@@ -131,7 +145,8 @@
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script>
         async function main() {
-            const liffId = "2008066763-ZJ72p7OJ"; // これは初回登録フォームの既存のLIFF ID
+            // (script部分は変更ありません)
+            const liffId = "2008066763-ZJ72p7OJ";
             const endpointUrl = "https://lumina-offer-bot.onrender.com/trigger-offer";
 
             try {

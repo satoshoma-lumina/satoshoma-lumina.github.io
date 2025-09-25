@@ -70,40 +70,31 @@ def process_and_send_offer(user_id, user_wishes):
                 flex_container = FlexContainer.from_dict(create_salon_flex_message(matched_salon, offer_text))
                 messages = [FlexMessage(alt_text=f"{matched_salon['店舗名']}からのオファー", contents=flex_container)]
                 line_bot_api.push_message(PushMessageRequest(to=user_id, messages=messages))
-                print("--- DEBUG: オファー送信完了 ---")
-            else:
-                print("--- DEBUG: 最終的にマッチするサロンがなかったため、オファーは送信されませんでした ---")
 
     except Exception as e:
-        print(f"--- DEBUG: オファー送信中のエラー: {e} ---")
+        print(f"オファー送信中のエラー: {e}")
 
 def find_and_generate_offer(user_wishes):
-    print("\n--- DEBUG: マッチング処理を開始します ---")
-    
     all_salons_data = salon_master_sheet.get_all_records()
-    if not all_salons_data: 
-        print("--- DEBUG: エラー: サロン情報が見つかりません。 ---")
-        return None, None, "サロン情報が見つかりません。"
+    if not all_salons_data: return None, None, "サロン情報が見つかりません。"
 
     salons_df = pd.DataFrame(all_salons_data)
-    print(f"--- DEBUG: 読み込んだサロン数: {len(salons_df)}件 ---")
     
     try:
-        user_area = user_wishes.get("area", "")
-        print(f"--- DEBUG: ユーザーの希望勤務地: '{user_area}' ---")
+        # ★変更点：都道府県と詳細な地名を結合して、より正確な位置を特定
+        prefecture = user_wishes.get("area_prefecture", "")
+        detail_area = user_wishes.get("area_detail", "")
+        full_area = f"{prefecture} {detail_area}"
+        
         geolocator = Nominatim(user_agent="lumina_offer_geocoder")
-        location = geolocator.geocode(user_area, timeout=10)
-        
-        if location:
-            print(f"--- DEBUG: ジオコーディング成功: {location.address} ---")
-            print(f"--- DEBUG: 緯度={location.latitude}, 経度={location.longitude} ---")
-        else:
-            print("--- DEBUG: ★★★ ジオコーディング失敗: location is None ★★★ ---")
+        location = geolocator.geocode(full_area, timeout=10)
+
+        if not location:
+            print(f"ジオコーディング失敗: {full_area}")
             return None, None, "希望勤務地の位置情報を特定できませんでした。"
-        
         user_coords = (location.latitude, location.longitude)
     except Exception as e:
-        print(f"--- DEBUG: ★★★ ジオコーディング中にエラー: {e} ★★★ ---")
+        print(f"ジオコーディング中にエラーが発生: {e}")
         return None, None, "位置情報取得中にエラーが発生しました。"
 
     salons_df['緯度'] = pd.to_numeric(salons_df['緯度'], errors='coerce')
@@ -114,15 +105,12 @@ def find_and_generate_offer(user_wishes):
     
     salons_df['距離'] = distances
     nearby_salons = salons_df[salons_df['距離'] <= 25].copy()
-    print(f"--- DEBUG: 25km圏内のサロン数: {len(nearby_salons)}件 ---")
     if nearby_salons.empty: return None, None, "希望勤務地の25km以内に条件に合うサロンが見つかりませんでした。"
     
     user_role = user_wishes.get("role")
     user_license = user_wishes.get("license")
-    print(f"--- DEBUG: ユーザーの希望役職: '{user_role}', 免許: '{user_license}' ---")
 
     salons_to_consider = nearby_salons[nearby_salons['募集状況'] == '募集中']
-    print(f"--- DEBUG: 「募集中」で絞り込み後: {len(salons_to_consider)}件 ---")
     if salons_to_consider.empty: return None, None, "募集中のサロンがありません。"
 
     def role_matcher(salon_roles):
@@ -130,17 +118,13 @@ def find_and_generate_offer(user_wishes):
         return user_role in roles_list
 
     salons_to_consider = salons_to_consider[salons_to_consider['役職'].apply(role_matcher)]
-    print(f"--- DEBUG: 「役職」で絞り込み後: {len(salons_to_consider)}件 ---")
     if salons_to_consider.empty: return None, None, "役職に合うサロンがありません。"
 
     if user_license == "取得済み":
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'] == '取得']
     else: 
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'].isin(['取得', '未取得'])]
-    print(f"--- DEBUG: 「免許」で絞り込み後: {len(salons_to_consider)}件 ---")
     if salons_to_consider.empty: return None, None, "免許条件に合うサロンがありません。"
-    
-    print(f"--- DEBUG: 全てのフィルタリング完了。{len(salons_to_consider)}件のサロンをGeminiに送信します。 ---")
     
     salons_json_string = salons_to_consider.to_json(orient='records', force_ascii=False)
 
@@ -191,8 +175,8 @@ def find_and_generate_offer(user_wishes):
         
         return ranked_ids, matched_salon_info, first_offer_message
     except Exception as e:
-        print(f"--- DEBUG: Geminiからの応答解析エラー: {e} ---")
-        print(f"--- DEBUG: Geminiからの元テキスト: {response.text}")
+        print(f"Geminiからの応答解析エラー: {e}")
+        print(f"Geminiからの元テキスト: {response.text}")
         return None, None, "最適なサロンが見つかりませんでした。"
 
 def create_salon_flex_message(salon, offer_text):
@@ -255,15 +239,9 @@ def submit_schedule():
             offer_management_sheet.update(f'D{row_to_update}:N{row_to_update}', [update_values])
             
             next_liff_url = f"https://liff.line.me/{QUESTIONNAIRE_LIFF_ID}"
-            return jsonify({
-                "status": "success", 
-                "message": "Schedule submitted successfully",
-                "nextLiffUrl": next_liff_url
-            })
+            return jsonify({ "status": "success", "message": "Schedule submitted successfully", "nextLiffUrl": next_liff_url })
         else:
-            print(f"該当のオファーが見つかりません。UserID: {user_id}, SalonID: {salon_id}")
             return jsonify({"status": "error", "message": "Offer not found"}), 404
-
     except Exception as e:
         print(f"スプレッドシート更新エラー: {e}")
         return jsonify({"status": "error", "message": "Failed to update spreadsheet"}), 500
@@ -278,18 +256,17 @@ def submit_questionnaire():
         if cell:
             row_to_update = cell.row
             
+            # ★変更点：正しい列範囲（Q列からY列）に書き込むように修正
             update_values = [
                 data.get('q1', ''), data.get('q2', ''), data.get('q3', ''),
                 data.get('q4', ''), data.get('q5', ''), data.get('q6', ''),
                 data.get('q7', ''), data.get('q8', ''), data.get('q9', '')
             ]
-            
-            user_management_sheet.update(f'P{row_to_update}:X{row_to_update}', [update_values])
+            user_management_sheet.update(f'Q{row_to_update}:Y{row_to_update}', [update_values])
             
             return jsonify({"status": "success", "message": "Questionnaire submitted successfully"})
         else:
             return jsonify({"status": "error", "message": "User not found"}), 404
-            
     except Exception as e:
         print(f"アンケート更新エラー: {e}")
         return jsonify({"status": "error", "message": "Failed to update questionnaire"}), 500
@@ -305,15 +282,8 @@ def trigger_offer():
     try:
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
-            welcome_message = (
-                "ご登録いただき、誠にありがとうございます！\n"
-                "LUMINA Offerが、あなたにプロフィールを拝見してピッタリな『好待遇サロンの公認オファー』を、このLINEアカウントを通じてご連絡いたします。\n"
-                "楽しみにお待ちください！"
-            )
-            line_bot_api.push_message(PushMessageRequest(
-                to=user_id,
-                messages=[TextMessage(text=welcome_message)]
-            ))
+            welcome_message = ( "ご登録いただき、誠にありがとうございます！\n" "LUMINA Offerが、あなたにプロフィールを拝見してピッタリな『好待遇サロンの公認オファー』を、このLINEアカウントを通じてご連絡いたします。\n" "楽しみにお待ちください！" )
+            line_bot_api.push_message(PushMessageRequest( to=user_id, messages=[TextMessage(text=welcome_message)] ))
     except Exception as e:
         print(f"ウェルカムメッセージの送信エラー: {e}")
 
@@ -324,22 +294,26 @@ def trigger_offer():
     try:
         user_headers = user_management_sheet.row_values(1)
         
+        # ★変更点：新しいフォームの項目名とシートの列名に対応
         user_row_dict = {
             "ユーザーID": user_id, "登録日": datetime.today().strftime('%Y/%m/%d'), "ステータス": 'オファー中',
             "氏名": user_wishes.get('full_name'), "性別": user_wishes.get('gender'), "生年月日": user_wishes.get('birthdate'),
             "電話番号": user_wishes.get('phone_number'), "MBTI": user_wishes.get('mbti'), "役職": user_wishes.get('role'),
-            "希望勤務地": user_wishes.get('area'), "職場満足度": user_wishes.get('satisfaction'), "興味のある待遇": user_wishes.get('perk'),
+            "希望エリア": user_wishes.get('area_prefecture'), # new
+            "希望勤務地": user_wishes.get('area_detail'), # new
+            "職場満足度": user_wishes.get('satisfaction'), "興味のある待遇": user_wishes.get('perk'),
             "現在の状況": user_wishes.get('current_status'), "転職希望時期": user_wishes.get('timing'), "美容師免許": user_wishes.get('license')
         }
         
-        user_row = [user_row_dict.get(h, '') for h in user_headers if not h.startswith('Q')]
+        # ★変更点：ヘッダーを基準に安全に書き込みリストを作成
+        profile_row_values = [user_row_dict.get(h, '') for h in user_headers if not h.startswith('Q')]
         
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
-            range_to_update = f'A{cell.row}:{chr(ord("A") + len(user_row) - 1)}{cell.row}'
-            user_management_sheet.update(range_to_update, [user_row])
+            range_to_update = f'A{cell.row}:{chr(ord("A") + len(profile_row_values) - 1)}{cell.row}'
+            user_management_sheet.update(range_to_update, [profile_row_values])
         else:
-            full_row = user_row + [''] * 9 
+            full_row = profile_row_values + [''] * 9 
             user_management_sheet.append_row(full_row)
     except Exception as e:
         print(f"ユーザー管理シートへの書き込みエラー: {e}")
