@@ -10,12 +10,8 @@ from datetime import datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 from flask import Flask, request, abort, jsonify
 from flask_cors import CORS
-
-# ★★★★★ 新機能：地理情報計算ライブラリ ★★★★★
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
-# ★★★★★★★★★★★★★★★★★★★★★★★
-
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
@@ -89,8 +85,6 @@ def find_and_generate_offer(user_wishes):
 
     salons_df = pd.DataFrame(all_salons_data)
     
-    # --- ★★★★★ ジオロケーション・マッチングロジック ★★★★★ ---
-    # ユーザーの希望勤務地から緯度・経度を特定
     try:
         geolocator = Nominatim(user_agent="lumina_offer_geocoder")
         location = geolocator.geocode(user_wishes.get("area", ""), timeout=10)
@@ -102,7 +96,6 @@ def find_and_generate_offer(user_wishes):
         print(f"ジオコーディング中にエラーが発生: {e}")
         return None, None, "位置情報取得中にエラーが発生しました。"
 
-    # 各サロンとの距離を計算し、7km以内のサロンのみを抽出
     salons_df['緯度'] = pd.to_numeric(salons_df['緯度'], errors='coerce')
     salons_df['経度'] = pd.to_numeric(salons_df['経度'], errors='coerce')
     salons_df.dropna(subset=['緯度', '経度'], inplace=True)
@@ -114,22 +107,28 @@ def find_and_generate_offer(user_wishes):
         distances.append(distance_km)
     
     salons_df['距離'] = distances
-    nearby_salons = salons_df[salons_df['距離'] <= 7].copy()
-    if nearby_salons.empty: return None, None, "希望勤務地の7km以内に条件に合うサロンが見つかりませんでした。"
+    nearby_salons = salons_df[salons_df['距離'] <= 25].copy()
+    if nearby_salons.empty: return None, None, "希望勤務地の25km以内に条件に合うサロンが見つかりませんでした。"
     
-    # --- その他の条件での絞り込み ---
     user_role = user_wishes.get("role")
     user_license = user_wishes.get("license")
 
-    # 1. 募集中のサロンに絞る
     salons_to_consider = nearby_salons[nearby_salons['募集状況'] == '募集中']
     if salons_to_consider.empty: return None, None, "募集中のサロンがありません。"
 
-    # 2. 役職は「完全一致」で絞る
-    salons_to_consider = salons_to_consider[salons_to_consider['役職'] == user_role]
-    if salons_to_consider.empty: return None, None, "役職に合うサロンがありません。"
+    # ★★★★★ ここからが変更点 ★★★★★
+    # 役職のマッチングロジックを、より賢く、柔軟なものに変更
+    def role_matcher(salon_roles):
+        # スプレッドシートの役職欄（例: "スタイリスト, 店長/副店長"）をリストに変換
+        # str型に変換してからsplitすることで、空欄などのエラーを防ぐ
+        roles_list = [r.strip() for r in str(salon_roles).split(',')]
+        # ユーザーの希望役職がリストに含まれているかチェック
+        return user_role in roles_list
 
-    # 3. 美容師免許で絞る
+    salons_to_consider = salons_to_consider[salons_to_consider['役職'].apply(role_matcher)]
+    if salons_to_consider.empty: return None, None, "役職に合うサロンがありません。"
+    # ★★★★★ ここまでが変更点 ★★★★★
+
     if user_license == "取得済み":
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'] == '取得']
     else:
@@ -139,13 +138,32 @@ def find_and_generate_offer(user_wishes):
     salons_json_string = salons_to_consider.to_json(orient='records', force_ascii=False)
 
     prompt = f"""
-    # (プロンプト内容は変更ありません)
+    あなたは、美容師向けのスカウトサービス「LUMINA Offer」の優秀なAIアシスタントです。
+    # 候補者プロフィール:
+    {json.dumps(user_wishes, ensure_ascii=False)}
+    # 候補となる求人リスト:
+    {salons_json_string}
+    # あなたのタスク:
+    1. **スコアリング**: 以下の基準で各求人を評価し、合計スコアが高い順に最大3件まで選んでください。
+       - 候補者が「最も興味のある待遇」（プロフィール内'perk'）を、求人が提供している（求人リスト内'待遇'に文字列として含まれている）場合: +10点
+       - 候補者のMBTIの性格特性が、求人の「特徴」と相性が良い場合: +5点
+    2. **オファー文章生成**: スコアが最も高かった1件目のサロンについてのみ、ルールを厳守し、候補者がカジュアル面談に行きたくなるようなオファー文章を150字以内で作成してください。
+       - 冒頭は必ず「LUMINA Offerから、あなたに特別なオファーが届いています。」で始めること。
+       - 候補者が「最も興味のある待遇」が、なぜそのサロンで満たされるのかを説明すること。
+       - 候補者のMBTIの性格特性が、どのようにそのサロンの文化や特徴と合致するのかを説明すること。
+       - 最後は必ず「まずは、サロンから話を聞いてみませんか？」という一文で締めること。
+       - 禁止事項: サロンが直接オファーを送っているかのような表現は避けること。
+    # 回答フォーマット:
+    以下のJSON形式で、厳密に回答してください。
+    {{
+      "ranked_store_ids": [ (ここにスコア上位の'店舗ID'を数値のリストで記述。例: [101, 108, 125]) ],
+      "first_offer_message": "(ここに1件目のサロン用のオファー文章を記述)"
+    }}
     """
     
     response = model.generate_content(prompt)
     
     try:
-        # (解析ロジックは変更ありません)
         response_text = response.text
         json_str_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if not json_str_match: raise ValueError("Response does not contain a valid JSON object.")
@@ -170,7 +188,6 @@ def find_and_generate_offer(user_wishes):
         print(f"Geminiからの元テキスト: {response.text}")
         return None, None, "最適なサロンが見つかりませんでした。"
 
-# (create_salon_flex_message 以下の関数は、前回の最終版から変更ありません)
 def create_salon_flex_message(salon, offer_text):
     role = salon.get("role_x") or salon.get("役職")
     salon_id = salon.get('店舗ID')
