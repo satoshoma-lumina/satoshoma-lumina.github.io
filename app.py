@@ -83,8 +83,7 @@ def find_and_generate_offer(user_wishes):
 
     salons_df = pd.DataFrame(all_salons_data)
     
-    # --- ★★★★★ 超柔軟マッチングロジック ★★★★★ ---
-    # ユーザーの希望
+    # --- マッチングロジック ---
     user_role = user_wishes.get("role")
     user_license = user_wishes.get("license")
 
@@ -92,18 +91,16 @@ def find_and_generate_offer(user_wishes):
     salons_to_consider = salons_df[salons_df['募集状況'] == '募集中'].copy()
     if salons_to_consider.empty: return None, None, "募集中のサロンがありません。"
 
-    # 2. 役職で絞る (カンマ区切り対応)
-    salons_to_consider = salons_to_consider[salons_to_consider['役職'].str.contains(user_role, na=False)]
+    # 2. ★変更点：役職は「完全一致」で絞る
+    salons_to_consider = salons_to_consider[salons_to_consider['役職'] == user_role]
     if salons_to_consider.empty: return None, None, "役職に合うサロンがありません。"
 
     # 3. 美容師免許で絞る
     if user_license == "取得済み":
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'] == '取得']
-    else: # 未取得の場合
+    else: 
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'].isin(['取得', '未取得'])]
     if salons_to_consider.empty: return None, None, "免許条件に合うサロンがありません。"
-    
-    # --- マッチングロジックここまで ---
     
     salons_json_string = salons_to_consider.to_json(orient='records', force_ascii=False)
 
@@ -115,7 +112,7 @@ def find_and_generate_offer(user_wishes):
     {salons_json_string}
     # あなたのタスク:
     1. **スコアリング**: 以下の基準で各求人を評価し、合計スコアが高い順に最大3件まで選んでください。
-       - 候補者が「最も興味のある待遇」（プロフィール内'perk'）を、求人が提供している（求人リスト内'待遇'に**文字列として含まれている**）場合: +10点
+       - 候補者が「最も興味のある待遇」（プロフィール内'perk'）を、求人が提供している（求人リスト内'待遇'に文字列として含まれている）場合: +10点
        - 候補者のMBTIの性格特性が、求人の「特徴」と相性が良い場合: +5点
     2. **オファー文章生成**: スコアが最も高かった1件目のサロンについてのみ、ルールを厳守し、候補者がカジュアル面談に行きたくなるようなオファー文章を150字以内で作成してください。
        - 冒頭は必ず「LUMINA Offerから、あなたに特別なオファーが届いています。」で始めること。
@@ -146,7 +143,6 @@ def find_and_generate_offer(user_wishes):
         if not ranked_ids: return None, None, "最適なサロンが見つかりませんでした。"
             
         first_match_id = ranked_ids[0]
-        # ranked_idsの要素が文字列の可能性も考慮してintに変換
         matched_salon_info_series = salons_to_consider[salons_to_consider['店舗ID'].astype(int) == int(first_match_id)]
         
         if matched_salon_info_series.empty: return None, None, "マッチしたサロン情報が見つかりませんでした。"
@@ -158,9 +154,6 @@ def find_and_generate_offer(user_wishes):
         print(f"Geminiからの応答解析エラー: {e}")
         print(f"Geminiからの元テキスト: {response.text}")
         return None, None, "最適なサロンが見つかりませんでした。"
-
-# (create_salon_flex_message 以下の関数は、前回の最終版から変更ありません)
-# ...
 
 def create_salon_flex_message(salon, offer_text):
     role = salon.get("role_x") or salon.get("役職")
@@ -290,32 +283,24 @@ def trigger_offer():
 
     try:
         user_headers = user_management_sheet.row_values(1)
-        user_row_dict = {h: user_wishes.get(h.lower().replace(' ', '_'), '') for h in user_headers}
-        user_row_dict.update({
-            "ユーザーID": user_id,
-            "登録日": datetime.today().strftime('%Y/%m/%d'),
-            "ステータス": 'オファー中',
-            "氏名": user_wishes.get('full_name'),
-            "性別": user_wishes.get('gender'),
-            "生年月日": user_wishes.get('birthdate'),
-            "電話番号": user_wishes.get('phone_number'),
-            "美容師免許": user_wishes.get('license'),
-            "MBTI": user_wishes.get('mbti'),
-            "役職": user_wishes.get('role'),
-            "希望勤務地": user_wishes.get('area'),
-            "職場満足度": user_wishes.get('satisfaction'),
-            "興味のある待遇": user_wishes.get('perk'),
-            "現在の状況": user_wishes.get('current_status'),
-            "転職希望時期": user_wishes.get('timing')
-        })
+        user_row_dict = {
+            "ユーザーID": user_id, "登録日": datetime.today().strftime('%Y/%m/%d'), "ステータス": 'オファー中',
+            "氏名": user_wishes.get('full_name'), "性別": user_wishes.get('gender'), "生年月日": user_wishes.get('birthdate'),
+            "電話番号": user_wishes.get('phone_number'), "美容師免許": user_wishes.get('license'), "MBTI": user_wishes.get('mbti'),
+            "役職": user_wishes.get('role'), "希望勤務地": user_wishes.get('area'), "職場満足度": user_wishes.get('satisfaction'),
+            "興味のある待遇": user_wishes.get('perk'), "現在の状況": user_wishes.get('current_status'), "転職希望時期": user_wishes.get('timing')
+        }
         
-        user_row = [user_row_dict.get(h, '') for h in user_headers]
+        user_row = [user_row_dict.get(h, '') for h in user_headers if not h.startswith('Q')]
         
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
-            user_management_sheet.update(f'A{cell.row}:X{cell.row}', [user_row])
+            range_to_update = f'A{cell.row}:{chr(ord("A") + len(user_row) - 1)}{cell.row}'
+            user_management_sheet.update(range_to_update, [user_row])
         else:
-            user_management_sheet.append_row(user_row)
+            # 新規ユーザーの場合、ヘッダーの全長に合わせて空のアンケート回答を追加
+            full_row = user_row + [''] * 9 
+            user_management_sheet.append_row(full_row)
     except Exception as e:
         print(f"ユーザー管理シートへの書き込みエラー: {e}")
 
