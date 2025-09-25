@@ -116,22 +116,16 @@ def find_and_generate_offer(user_wishes):
     salons_to_consider = nearby_salons[nearby_salons['募集状況'] == '募集中']
     if salons_to_consider.empty: return None, None, "募集中のサロンがありません。"
 
-    # ★★★★★ ここからが変更点 ★★★★★
-    # 役職のマッチングロジックを、より賢く、柔軟なものに変更
     def role_matcher(salon_roles):
-        # スプレッドシートの役職欄（例: "スタイリスト, 店長/副店長"）をリストに変換
-        # str型に変換してからsplitすることで、空欄などのエラーを防ぐ
         roles_list = [r.strip() for r in str(salon_roles).split(',')]
-        # ユーザーの希望役職がリストに含まれているかチェック
         return user_role in roles_list
 
     salons_to_consider = salons_to_consider[salons_to_consider['役職'].apply(role_matcher)]
     if salons_to_consider.empty: return None, None, "役職に合うサロンがありません。"
-    # ★★★★★ ここまでが変更点 ★★★★★
 
     if user_license == "取得済み":
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'] == '取得']
-    else:
+    else: 
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'].isin(['取得', '未取得'])]
     if salons_to_consider.empty: return None, None, "免許条件に合うサロンがありません。"
     
@@ -189,7 +183,7 @@ def find_and_generate_offer(user_wishes):
         return None, None, "最適なサロンが見つかりませんでした。"
 
 def create_salon_flex_message(salon, offer_text):
-    role = salon.get("role_x") or salon.get("役職")
+    role = salon.get("役職")
     salon_id = salon.get('店舗ID')
     liff_url = f"https://liff.line.me/{SCHEDULE_LIFF_ID}?salonId={salon_id}"
     
@@ -316,21 +310,36 @@ def trigger_offer():
 
     try:
         user_headers = user_management_sheet.row_values(1)
+        
+        # ユーザー管理シートのヘッダー順に辞書を作成
         user_row_dict = {
-            "ユーザーID": user_id, "登録日": datetime.today().strftime('%Y/%m/%d'), "ステータス": 'オファー中',
-            "氏名": user_wishes.get('full_name'), "性別": user_wishes.get('gender'), "生年月日": user_wishes.get('birthdate'),
-            "電話番号": user_wishes.get('phone_number'), "美容師免許": user_wishes.get('license'), "MBTI": user_wishes.get('mbti'),
-            "役職": user_wishes.get('role'), "希望勤務地": user_wishes.get('area'), "職場満足度": user_wishes.get('satisfaction'),
-            "興味のある待遇": user_wishes.get('perk'), "現在の状況": user_wishes.get('current_status'), "転職希望時期": user_wishes.get('timing')
+            "ユーザーID": user_id, 
+            "登録日": datetime.today().strftime('%Y/%m/%d'), 
+            "ステータス": 'オファー中',
+            "氏名": user_wishes.get('full_name'), 
+            "性別": user_wishes.get('gender'), 
+            "生年月日": user_wishes.get('birthdate'),
+            "電話番号": user_wishes.get('phone_number'), 
+            "MBTI": user_wishes.get('mbti'), 
+            "役職": user_wishes.get('role'), 
+            "希望勤務地": user_wishes.get('area'), 
+            "職場満足度": user_wishes.get('satisfaction'), 
+            "興味のある待遇": user_wishes.get('perk'), 
+            "現在の状況": user_wishes.get('current_status'), 
+            "転職希望時期": user_wishes.get('timing'),
+            "美容師免許": user_wishes.get('license')
         }
         
+        # ヘッダーの順序に従って値のリストを作成
         user_row = [user_row_dict.get(h, '') for h in user_headers if not h.startswith('Q')]
         
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
+            # 既存ユーザーの場合はプロフィール情報のみ更新
             range_to_update = f'A{cell.row}:{chr(ord("A") + len(user_row) - 1)}{cell.row}'
             user_management_sheet.update(range_to_update, [user_row])
         else:
+            # 新規ユーザーの場合、アンケート列の分だけ空欄を追加して行を追加
             full_row = user_row + [''] * 9 
             user_management_sheet.append_row(full_row)
     except Exception as e:
