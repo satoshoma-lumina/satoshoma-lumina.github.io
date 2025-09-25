@@ -63,12 +63,7 @@ def process_and_send_offer(user_id, user_wishes):
                 today_str = datetime.today().strftime('%Y/%m/%d')
                 
                 offer_headers = ['ユーザーID', '店舗ID', 'オファー送信日', 'オファー状況']
-                initial_offer_data = {
-                    "ユーザーID": user_id,
-                    "店舗ID": matched_salon.get('店舗ID'),
-                    "オファー送信日": today_str,
-                    "オファー状況": "送信済み"
-                }
+                initial_offer_data = { "ユーザーID": user_id, "店舗ID": matched_salon.get('店舗ID'), "オファー送信日": today_str, "オファー状況": "送信済み" }
                 new_offer_row = [initial_offer_data.get(h, '') for h in offer_headers]
                 offer_management_sheet.append_row(new_offer_row, value_input_option='USER_ENTERED')
             
@@ -100,11 +95,7 @@ def find_and_generate_offer(user_wishes):
     salons_df['経度'] = pd.to_numeric(salons_df['経度'], errors='coerce')
     salons_df.dropna(subset=['緯度', '経度'], inplace=True)
 
-    distances = []
-    for index, salon in salons_df.iterrows():
-        salon_coords = (salon['緯度'], salon['経度'])
-        distance_km = geodesic(user_coords, salon_coords).kilometers
-        distances.append(distance_km)
+    distances = [geodesic(user_coords, (salon['緯度'], salon['経度'])).kilometers for _, salon in salons_df.iterrows()]
     
     salons_df['距離'] = distances
     nearby_salons = salons_df[salons_df['距離'] <= 25].copy()
@@ -311,35 +302,21 @@ def trigger_offer():
     try:
         user_headers = user_management_sheet.row_values(1)
         
-        # ユーザー管理シートのヘッダー順に辞書を作成
         user_row_dict = {
-            "ユーザーID": user_id, 
-            "登録日": datetime.today().strftime('%Y/%m/%d'), 
-            "ステータス": 'オファー中',
-            "氏名": user_wishes.get('full_name'), 
-            "性別": user_wishes.get('gender'), 
-            "生年月日": user_wishes.get('birthdate'),
-            "電話番号": user_wishes.get('phone_number'), 
-            "MBTI": user_wishes.get('mbti'), 
-            "役職": user_wishes.get('role'), 
-            "希望勤務地": user_wishes.get('area'), 
-            "職場満足度": user_wishes.get('satisfaction'), 
-            "興味のある待遇": user_wishes.get('perk'), 
-            "現在の状況": user_wishes.get('current_status'), 
-            "転職希望時期": user_wishes.get('timing'),
-            "美容師免許": user_wishes.get('license')
+            "ユーザーID": user_id, "登録日": datetime.today().strftime('%Y/%m/%d'), "ステータス": 'オファー中',
+            "氏名": user_wishes.get('full_name'), "性別": user_wishes.get('gender'), "生年月日": user_wishes.get('birthdate'),
+            "電話番号": user_wishes.get('phone_number'), "MBTI": user_wishes.get('mbti'), "役職": user_wishes.get('role'),
+            "希望勤務地": user_wishes.get('area'), "職場満足度": user_wishes.get('satisfaction'), "興味のある待遇": user_wishes.get('perk'),
+            "現在の状況": user_wishes.get('current_status'), "転職希望時期": user_wishes.get('timing'), "美容師免許": user_wishes.get('license')
         }
         
-        # ヘッダーの順序に従って値のリストを作成
         user_row = [user_row_dict.get(h, '') for h in user_headers if not h.startswith('Q')]
         
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
-            # 既存ユーザーの場合はプロフィール情報のみ更新
             range_to_update = f'A{cell.row}:{chr(ord("A") + len(user_row) - 1)}{cell.row}'
             user_management_sheet.update(range_to_update, [user_row])
         else:
-            # 新規ユーザーの場合、アンケート列の分だけ空欄を追加して行を追加
             full_row = user_row + [''] * 9 
             user_management_sheet.append_row(full_row)
     except Exception as e:
