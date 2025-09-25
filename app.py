@@ -81,7 +81,6 @@ def find_and_generate_offer(user_wishes):
     salons_df = pd.DataFrame(all_salons_data)
     
     try:
-        # ★変更点：都道府県と詳細な地名を結合して、より正確な位置を特定
         prefecture = user_wishes.get("area_prefecture", "")
         detail_area = user_wishes.get("area_detail", "")
         full_area = f"{prefecture} {detail_area}"
@@ -180,17 +179,42 @@ def find_and_generate_offer(user_wishes):
         return None, None, "最適なサロンが見つかりませんでした。"
 
 def create_salon_flex_message(salon, offer_text):
-    role = salon.get("役職")
+    db_role = salon.get("役職", "")
+    if "アシスタント" in db_role:
+        display_role = "アシスタント"
+    else:
+        display_role = "スタイリスト"
+
+    recruitment_type = salon.get("募集", "")
     salon_id = salon.get('店舗ID')
     liff_url = f"https://liff.line.me/{SCHEDULE_LIFF_ID}?salonId={salon_id}"
     
     return {
         "type": "bubble", "hero": { "type": "image", "url": salon.get("画像URL", ""), "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
-        "body": { "type": "box", "layout": "vertical", "contents": [ { "type": "text", "text": salon.get("店舗名", ""), "weight": "bold", "size": "xl" }, { "type": "box", "layout": "vertical", "margin": "lg", "spacing": "sm", "contents": [ { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "勤務地", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": salon.get("住所", ""), "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "募集役職", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": role, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ { "type": "text", "text": "メッセージ", "color": "#aaaaaa", "size": "sm", "flex": 2 }, { "type": "text", "text": offer_text, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]} ]} ] },
+        "body": { "type": "box", "layout": "vertical", "contents": [ 
+            { "type": "text", "text": salon.get("店舗名", ""), "weight": "bold", "size": "xl" }, 
+            { "type": "box", "layout": "vertical", "margin": "lg", "spacing": "sm", "contents": [ 
+                { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ 
+                    { "type": "text", "text": "勤務地", "color": "#aaaaaa", "size": "sm", "flex": 2 }, 
+                    { "type": "text", "text": salon.get("住所", ""), "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]}, 
+                { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ 
+                    { "type": "text", "text": "募集役職", "color": "#aaaaaa", "size": "sm", "flex": 2 }, 
+                    { "type": "text", "text": display_role, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]},
+                { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [
+                    { "type": "text", "text": "募集形態", "color": "#aaaaaa", "size": "sm", "flex": 2 },
+                    { "type": "text", "text": recruitment_type, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]},
+                { "type": "box", "layout": "baseline", "spacing": "sm", "contents": [ 
+                    { "type": "text", "text": "メッセージ", "color": "#aaaaaa", "size": "sm", "flex": 2 }, 
+                    { "type": "text", "text": offer_text, "wrap": True, "color": "#666666", "size": "sm", "flex": 5 } ]} 
+            ]} 
+        ]},
+        # ★★★★★ ここからが変更点 ★★★★★
         "footer": { "type": "box", "layout": "vertical", "spacing": "sm", "contents": [ 
+            # 「詳しく見る」ボタンを復活させる
             { "type": "button", "style": "link", "height": "sm", "action": { "type": "uri", "label": "詳しく見る", "uri": "https://example.com" }}, 
             { "type": "button", "style": "primary", "height": "sm", "action": { "type": "uri", "label": "サロンから話を聞いてみる", "uri": liff_url }, "color": "#FF6B6B"} 
         ], "flex": 0 }
+        # ★★★★★ ここまでが変更点 ★★★★★
     }
 
 def get_age_from_birthdate(birthdate):
@@ -256,7 +280,6 @@ def submit_questionnaire():
         if cell:
             row_to_update = cell.row
             
-            # ★変更点：正しい列範囲（Q列からY列）に書き込むように修正
             update_values = [
                 data.get('q1', ''), data.get('q2', ''), data.get('q3', ''),
                 data.get('q4', ''), data.get('q5', ''), data.get('q6', ''),
@@ -294,18 +317,16 @@ def trigger_offer():
     try:
         user_headers = user_management_sheet.row_values(1)
         
-        # ★変更点：新しいフォームの項目名とシートの列名に対応
         user_row_dict = {
             "ユーザーID": user_id, "登録日": datetime.today().strftime('%Y/%m/%d'), "ステータス": 'オファー中',
             "氏名": user_wishes.get('full_name'), "性別": user_wishes.get('gender'), "生年月日": user_wishes.get('birthdate'),
             "電話番号": user_wishes.get('phone_number'), "MBTI": user_wishes.get('mbti'), "役職": user_wishes.get('role'),
-            "希望エリア": user_wishes.get('area_prefecture'), # new
-            "希望勤務地": user_wishes.get('area_detail'), # new
+            "希望エリア": user_wishes.get('area_prefecture'),
+            "希望勤務地": user_wishes.get('area_detail'),
             "職場満足度": user_wishes.get('satisfaction'), "興味のある待遇": user_wishes.get('perk'),
             "現在の状況": user_wishes.get('current_status'), "転職希望時期": user_wishes.get('timing'), "美容師免許": user_wishes.get('license')
         }
         
-        # ★変更点：ヘッダーを基準に安全に書き込みリストを作成
         profile_row_values = [user_row_dict.get(h, '') for h in user_headers if not h.startswith('Q')]
         
         cell = user_management_sheet.find(user_id, in_column=1)

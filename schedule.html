@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>面談希望のご入力</title>
+    <title>サロンとお話のご予約</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f7f7f7; color: #333; }
         .container { max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -28,40 +28,40 @@
 </head>
 <body>
     <div class="container">
-        <h1>面談希望のご入力</h1>
-        <p><strong id="salon-name">〇〇サロン</strong>とのカジュアル面談の日程を調整します。</p>
+        <h1>サロンとお話のご予約</h1>
+        <p>カジュアル面談の日程を調整します。</p>
         
         <form id="scheduleForm">
             <div class="form-group">
-                <h2>1. ご希望の面談方法を1つ選んでください</h2>
+                <h2>ご希望のお話の形をお選びください</h2>
                 <div class="radio-group">
-                    <label><input type="radio" name="interviewMethod" value="オンラインで話を聞く" required> オンラインで話を聞く</label>
-                    <label><input type="radio" name="interviewMethod" value="カフェなどで話を聞いてみる"> カフェなどで話を聞いてみる</label>
-                    <label><input type="radio" name="interviewMethod" value="サロン見学で話を聞いてみる"> サロン見学で話を聞いてみる</label>
+                    <label><input type="radio" name="interviewMethod" value="オンラインで話を聞く" required> 💻 オンラインで話を聞く</label>
+                    <label><input type="radio" name="interviewMethod" value="カフェなどで話を聞いてみる"> ☕️ カフェなどで話を聞いてみる</label>
+                    <label><input type="radio" name="interviewMethod" value="サロン見学で話を聞いてみる"> 💇‍♀️ サロン見学で話を聞いてみる</label>
                 </div>
             </div>
 
             <div class="form-group">
-                <h2>2. ご希望の候補日時を3つ入力してください</h2>
+                <h2>ご希望の候補日時を3つ入力してください</h2>
                 <div class="date-group">
                     <strong>第1希望</strong>
                     <input type="date" name="date1" required>
                     <div class="time-inputs">
-                        <input type="time" name="startTime1" required> <span>〜</span> <input type="time" name="endTime1" required>
+                        <input type="time" name="startTime1" step="1800" required> <span>〜</span> <input type="time" name="endTime1" step="1800" required>
                     </div>
                 </div>
                 <div class="date-group">
                     <strong>第2希望</strong>
                     <input type="date" name="date2">
                     <div class="time-inputs">
-                        <input type="time" name="startTime2"> <span>〜</span> <input type="time" name="endTime2">
+                        <input type="time" name="startTime2" step="1800"> <span>〜</span> <input type="time" name="endTime2" step="1800">
                     </div>
                 </div>
                 <div class="date-group">
                     <strong>第3希望</strong>
                     <input type="date" name="date3">
                     <div class="time-inputs">
-                        <input type="time" name="startTime3"> <span>〜</span> <input type="time" name="endTime3">
+                        <input type="time" name="startTime3" step="1800"> <span>〜</span> <input type="time" name="endTime3" step="1800">
                     </div>
                 </div>
             </div>
@@ -94,7 +94,7 @@
             const urlParams = new URLSearchParams(window.location.search);
             const salonId = urlParams.get('salonId');
 
-            document.getElementById('salon-name').textContent = `サロン(ID: ${salonId})`;
+            // ★変更点⑤：サロンIDを表示するロジックを削除
 
             const form = document.getElementById('scheduleForm');
             form.addEventListener('submit', async (e) => {
@@ -129,16 +129,12 @@
                     });
 
                     if (response.ok) {
-                        // ★★★★★ ここからが変更点 ★★★★★
                         const result = await response.json();
                         if (result.nextLiffUrl) {
-                            // サーバーから受け取った次のLIFF URLに画面を遷移させる
                             window.location.href = result.nextLiffUrl;
                         } else {
-                            // nextLiffUrlがない場合は、念のためウィンドウを閉じる
                             liff.closeWindow();
                         }
-                        // ★★★★★ ここまでが変更点 ★★★★★
                     } else {
                         const errorData = await response.json();
                         throw new Error(errorData.message || 'サーバーエラーが発生しました。');
