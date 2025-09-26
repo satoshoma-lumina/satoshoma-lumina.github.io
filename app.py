@@ -31,6 +31,7 @@ SATO_EMAIL = "sato@lumina-beauty.co.jp"
 
 # --- 認証設定 ---
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+# Render環境では '/etc/secrets/' にマウントされる
 creds_path = '/etc/secrets/google_credentials.json'
 creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
 client = gspread.authorize(creds)
@@ -152,14 +153,14 @@ def find_and_generate_offer(user_wishes):
     {salons_json_string}
     # あなたのタスク:
     1. **スコアリング**: 以下の基準で各求人を評価し、合計スコアが高い順に最大3件まで選んでください。
-       - 候補者が「最も興味のある待遇」（プロフィール内'perk'）を、求人が提供している（求人リスト内'待遇'に文字列として含まれている）場合: +10点
-       - 候補者のMBTIの性格特性が、求人の「特徴」と相性が良い場合: +5点
+        - 候補者が「最も興味のある待遇」（プロフィール内'perk'）を、求人が提供している（求人リスト内'待遇'に文字列として含まれている）場合: +10点
+        - 候補者のMBTIの性格特性が、求人の「特徴」と相性が良い場合: +5点
     2. **オファー文章生成**: スコアが最も高かった1件目のサロンについてのみ、ルールを厳守し、候補者がカジュアル面談に行きたくなるようなオファー文章を150字以内で作成してください。
-       - 冒頭は必ず「LUMINA Offerから、あなたに特別なオファーが届いています。」で始めること。
-       - 候補者が「最も興味のある待遇」が、なぜそのサロンで満たされるのかを説明すること。
-       - 候補者のMBTIの性格特性が、どのようにそのサロンの文化や特徴と合致するのかを説明すること。
-       - 最後は必ず「まずは、サロンから話を聞いてみませんか？」という一文で締めること。
-       - 禁止事項: サロンが直接オファーを送っているかのような表現は避けること。
+        - 冒頭は必ず「LUMINA Offerから、あなたに特別なオファーが届いています。」で始めること。
+        - 候補者が「最も興味のある待遇」が、なぜそのサロンで満たされるのかを説明すること。
+        - 候補者のMBTIの性格特性が、どのようにそのサロンの文化や特徴と合致するのかを説明すること。
+        - 最後は必ず「まずは、サロンから話を聞いてみませんか？」という一文で締めること。
+        - 禁止事項: サロンが直接オファーを送っているかのような表現は避けること。
     # 回答フォーマット:
     以下のJSON形式で、厳密に回答してください。
     {{
@@ -374,18 +375,18 @@ def trigger_offer():
         }
         
         # ★★★★★ ここからがバグ修正点 ★★★★★
-        # ヘッダーを基準に、書き込むべきプロフィール情報（A列〜P列）のリストを正確に作成
-        profile_headers = [h for h in user_headers if not h.startswith('Q')]
+        # ヘッダー全体からプロフィール情報部分（A列〜P列の16列）を正確に切り出す
+        profile_headers = user_headers[:16]
         profile_row_values = [user_row_dict.get(h, '') for h in profile_headers]
         
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
-            # 既存ユーザーの場合はプロフィール情報（A列〜P列）のみを更新
-            range_to_update = f'A{cell.row}:P{cell.row}'
+            # 【改善案】書き込み範囲を動的に計算するように修正
+            range_to_update = f'A{cell.row}:{chr(ord("A") + len(profile_row_values) - 1)}{cell.row}'
             user_management_sheet.update(range_to_update, [profile_row_values])
         else:
-            # 新規ユーザーの場合、アンケート列の分（9項目）だけ空欄を追加して行を追加
-            full_row = profile_row_values + [''] * 9 
+            # 新規ユーザーの場合、アンケート列の分（8項目）だけ空欄を追加して行を追加
+            full_row = profile_row_values + [''] * 8 
             user_management_sheet.append_row(full_row)
         # ★★★★★ ここまでがバグ修正点 ★★★★★
 
