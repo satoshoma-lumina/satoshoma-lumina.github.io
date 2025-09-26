@@ -373,18 +373,22 @@ def trigger_offer():
             "現在の状況": user_wishes.get('current_status'), "転職希望時期": user_wishes.get('timing'), "美容師免許": user_wishes.get('license')
         }
         
-        profile_row_values = [user_row_dict.get(h, '') for h in user_headers if not h.startswith('Q')]
+        # ★★★★★ ここからがバグ修正点 ★★★★★
+        # ヘッダーを基準に、書き込むべきプロフィール情報（A列〜P列）のリストを正確に作成
+        profile_headers = [h for h in user_headers if not h.startswith('Q')]
+        profile_row_values = [user_row_dict.get(h, '') for h in profile_headers]
         
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
+            # 既存ユーザーの場合はプロフィール情報（A列〜P列）のみを更新
             range_to_update = f'A{cell.row}:P{cell.row}'
             user_management_sheet.update(range_to_update, [profile_row_values])
         else:
-            # ★★★★★ ここからがバグ修正点 ★★★★★
-            # ユーザー管理シートは25列(Y列まで)なので、空欄は9つ追加する
+            # 新規ユーザーの場合、アンケート列の分（9項目）だけ空欄を追加して行を追加
             full_row = profile_row_values + [''] * 9 
             user_management_sheet.append_row(full_row)
-            # ★★★★★ ここまでがバグ修正点 ★★★★★
+        # ★★★★★ ここまでがバグ修正点 ★★★★★
+
     except Exception as e:
         print(f"ユーザー管理シートへの書き込みエラー: {e}")
         # エラーが発生しても、オファー送信処理は継続するよう試みる
