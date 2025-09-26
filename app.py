@@ -380,10 +380,16 @@ def trigger_offer():
             range_to_update = f'A{cell.row}:P{cell.row}'
             user_management_sheet.update(range_to_update, [profile_row_values])
         else:
+            # ★★★★★ ここからがバグ修正点 ★★★★★
+            # ユーザー管理シートは25列(Y列まで)なので、空欄は9つ追加する
             full_row = profile_row_values + [''] * 9 
             user_management_sheet.append_row(full_row)
+            # ★★★★★ ここまでがバグ修正点 ★★★★★
     except Exception as e:
         print(f"ユーザー管理シートへの書き込みエラー: {e}")
+        # エラーが発生しても、オファー送信処理は継続するよう試みる
+        process_and_send_offer(user_id, user_wishes)
+        return jsonify({"status": "success_with_db_error", "message": "Offer task processed, but failed to write to user sheet"})
 
     process_and_send_offer(user_id, user_wishes)
     
