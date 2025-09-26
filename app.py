@@ -46,8 +46,8 @@ handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET'))
 
 # Gemini API
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-# ★★★★★ モデル名を 'gemini-pro' に変更してテスト ★★★★★
-model = genai.GenerativeModel('gemini-pro')
+# ★★★★★ モデル名を本来の 'gemini-1.5-flash-latest' に戻します ★★★★★
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 
 def send_notification_email(subject, body):
