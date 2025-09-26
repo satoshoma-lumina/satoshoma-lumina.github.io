@@ -15,14 +15,9 @@ from sendgrid.helpers.mail import Mail
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
-    Configuration,
-    ApiClient,
-    MessagingApi,
-    PushMessageRequest,
-    ReplyMessageRequest,
-    TextMessage,
-    FlexMessage,
-    FlexContainer
+    Configuration, ApiClient, MessagingApi,
+    PushMessageRequest, ReplyMessageRequest, TextMessage,
+    FlexMessage, FlexContainer
 )
 from linebot.v3.webhooks import MessageEvent, TextMessageContent
 
@@ -54,13 +49,12 @@ genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 
-# ★★★★★ 新機能：SendGridメール通知関数 ★★★★★
 def send_notification_email(subject, body):
     from_email = os.environ.get('MAIL_USERNAME')
     api_key = os.environ.get('SENDGRID_API_KEY')
     
     if not from_email or not api_key:
-        print("メール送信用の環境変数（MAIL_USERNAME or SENDGRID_API_KEY）が設定されていません。")
+        print("メール送信用の環境変数が設定されていません。")
         return
 
     message = Mail(
@@ -386,7 +380,7 @@ def trigger_offer():
             range_to_update = f'A{cell.row}:P{cell.row}'
             user_management_sheet.update(range_to_update, [profile_row_values])
         else:
-            full_row = profile_row_values + [''] * 8
+            full_row = profile_row_values + [''] * 9 
             user_management_sheet.append_row(full_row)
     except Exception as e:
         print(f"ユーザー管理シートへの書き込みエラー: {e}")
