@@ -31,7 +31,6 @@ SATO_EMAIL = "sato@lumina-beauty.co.jp"
 
 # --- 認証設定 ---
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-# Render環境では '/etc/secrets/' にマウントされる
 creds_path = '/etc/secrets/google_credentials.json'
 creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
 client = gspread.authorize(creds)
@@ -47,7 +46,8 @@ handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET'))
 
 # Gemini API
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-model = genai.GenerativeModel('gemini-1.5-flash-latest')
+# ★★★★★ モデル名を 'gemini-pro' に変更してテスト ★★★★★
+model = genai.GenerativeModel('gemini-pro')
 
 
 def send_notification_email(subject, body):
