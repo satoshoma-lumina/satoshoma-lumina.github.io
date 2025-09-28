@@ -46,7 +46,6 @@ handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET'))
 
 # Gemini API
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-# ★★★★★ 最新ライブラリを使用するため、本来の最新モデル名に戻します ★★★★★
 model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 
@@ -72,12 +71,15 @@ def send_notification_email(subject, body):
 
 def process_and_send_offer(user_id, user_wishes):
     try:
-        ranked_ids, matched_salon, offer_text = find_and_generate_offer(user_wishes)
+        # ★★★★★ 変数名を変更し、成功時(オファー文)と失敗時(理由)の両方を受け取れるようにします ★★★★★
+        ranked_ids, matched_salon, result_or_reason = find_and_generate_offer(user_wishes)
         
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
 
             if matched_salon:
+                # 成功した場合、result_or_reason にはAIが生成したオファー文章が入っています
+                offer_text = result_or_reason
                 today_str = datetime.today().strftime('%Y/%m/%d')
                 
                 offer_headers = ['ユーザーID', '店舗ID', 'オファー送信日', 'オファー状況']
@@ -89,8 +91,9 @@ def process_and_send_offer(user_id, user_wishes):
                 messages = [FlexMessage(alt_text=f"{matched_salon['店舗名']}からのオファー", contents=flex_container)]
                 line_bot_api.push_message(PushMessageRequest(to=user_id, messages=messages))
             else:
-                # ★★★★★ マッチするサロンがなかった場合に備えたログを追加 ★★★★★
-                print(f"ユーザーID {user_id} にマッチするサロンが見つからなかったため、オファーは送信されませんでした。")
+                # ★★★★★ 失敗した場合、result_or_reason にはマッチしなかった「理由」が入っています ★★★★★
+                reason = result_or_reason
+                print(f"ユーザーID {user_id} にマッチするサロンが見つからなかったため、オファーは送信されませんでした。詳細: {reason}")
 
 
     except Exception as e:
@@ -185,7 +188,7 @@ def find_and_generate_offer(user_wishes):
         ranked_ids = gemini_response.get("ranked_store_ids")
         first_offer_message = gemini_response.get("first_offer_message")
         
-        if not ranked_ids: return None, None, "最適なサロンが見つかりませんでした。"
+        if not ranked_ids: return None, None, "AIによるスコアリングの結果、最適なサロンが見つかりませんでした。"
             
         first_match_id = ranked_ids[0]
         matched_salon_info_series = salons_to_consider[salons_to_consider['店舗ID'].astype(int) == int(first_match_id)]
@@ -198,7 +201,7 @@ def find_and_generate_offer(user_wishes):
     except Exception as e:
         print(f"Geminiからの応答解析エラー: {e}")
         print(f"Geminiからの元テキスト: {response.text}")
-        return None, None, "最適なサロンが見つかりませんでした。"
+        return None, None, "AIからの応答解析中にエラーが発生しました。"
 
 def create_salon_flex_message(salon, offer_text):
     db_role = salon.get("役職", "")
