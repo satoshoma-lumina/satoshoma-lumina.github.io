@@ -46,8 +46,8 @@ handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET'))
 
 # Gemini API
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-# ★★★★★ 最終修正：互換性の高い安定版モデル 'gemini-1.0-pro' に変更 ★★★★★
-model = genai.GenerativeModel('gemini-1.0-pro')
+# ★★★★★ 最新ライブラリを使用するため、本来の最新モデル名に戻します ★★★★★
+model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
 
 def send_notification_email(subject, body):
@@ -88,6 +88,10 @@ def process_and_send_offer(user_id, user_wishes):
                 flex_container = FlexContainer.from_dict(create_salon_flex_message(matched_salon, offer_text))
                 messages = [FlexMessage(alt_text=f"{matched_salon['店舗名']}からのオファー", contents=flex_container)]
                 line_bot_api.push_message(PushMessageRequest(to=user_id, messages=messages))
+            else:
+                # ★★★★★ マッチするサロンがなかった場合に備えたログを追加 ★★★★★
+                print(f"ユーザーID {user_id} にマッチするサロンが見つからなかったため、オファーは送信されませんでした。")
+
 
     except Exception as e:
         print(f"オファー送信中のエラー: {e}")
@@ -374,25 +378,19 @@ def trigger_offer():
             "現在の状況": user_wishes.get('current_status'), "転職希望時期": user_wishes.get('timing'), "美容師免許": user_wishes.get('license')
         }
         
-        # ★★★★★ ここからがバグ修正点 ★★★★★
-        # ヘッダー全体からプロフィール情報部分（A列〜P列の16列）を正確に切り出す
         profile_headers = user_headers[:16]
         profile_row_values = [user_row_dict.get(h, '') for h in profile_headers]
         
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
-            # 【改善案】書き込み範囲を動的に計算するように修正
             range_to_update = f'A{cell.row}:{chr(ord("A") + len(profile_row_values) - 1)}{cell.row}'
             user_management_sheet.update(range_to_update, [profile_row_values])
         else:
-            # 新規ユーザーの場合、アンケート列の分（8項目）だけ空欄を追加して行を追加
             full_row = profile_row_values + [''] * 8 
             user_management_sheet.append_row(full_row)
-        # ★★★★★ ここまでがバグ修正点 ★★★★★
 
     except Exception as e:
         print(f"ユーザー管理シートへの書き込みエラー: {e}")
-        # エラーが発生しても、オファー送信処理は継続するよう試みる
         process_and_send_offer(user_id, user_wishes)
         return jsonify({"status": "success_with_db_error", "message": "Offer task processed, but failed to write to user sheet"})
 
