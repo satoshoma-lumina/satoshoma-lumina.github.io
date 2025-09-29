@@ -189,7 +189,7 @@ def find_and_generate_offer(user_wishes):
         first_offer_message = gemini_response.get("first_offer_message")
         
         if not ranked_ids: return None, None, "AIによるスコアリングの結果、最適なサロンが見つかりませんでした。"
-            
+              
         first_match_id = ranked_ids[0]
         matched_salon_info_series = salons_to_consider[salons_to_consider['店舗ID'].astype(int) == int(first_match_id)]
         
@@ -267,12 +267,19 @@ def submit_schedule():
     salon_id = data.get('salonId')
     
     try:
-        all_records = offer_management_sheet.get_all_records()
+        # ★★★★★ ここからが変更点 ★★★★★
+        # まずユーザーIDが含まれる全てのセルを検索
+        user_cells = offer_management_sheet.findall(user_id, in_column=1)
         row_to_update = -1
-        for i, record in enumerate(all_records):
-            if record.get('ユーザーID') == user_id and str(record.get('店舗ID')) == str(salon_id):
-                row_to_update = i + 2
-                break
+        
+        # 見つかった行の中から、店舗IDも一致するものを探す
+        for cell in user_cells:
+            # 2列目（B列）の店舗IDを取得して比較
+            record_salon_id = offer_management_sheet.cell(cell.row, 2).value
+            if str(record_salon_id) == str(salon_id):
+                row_to_update = cell.row
+                break # 一致するものが見つかったらループを抜ける
+        # ★★★★★ ここまでが変更点 ★★★★★
         
         if row_to_update != -1:
             update_values = [
@@ -282,6 +289,7 @@ def submit_schedule():
                 data['date2'], data['startTime2'], data['endTime2'],
                 data['date3'], data['startTime3'], data['endTime3']
             ]
+            # 更新範囲はD列からN列
             offer_management_sheet.update(f'D{row_to_update}:N{row_to_update}', [update_values])
             
             subject = "【LUMINAオファー】面談日程の新規登録がありました"
