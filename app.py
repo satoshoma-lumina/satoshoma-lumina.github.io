@@ -5,7 +5,7 @@ import pandas as pd
 import google.generativeai as genai
 import re
 from datetime import datetime, timedelta
-from oauth2client.service_account import ServiceAccountCredentials
+# from oauth2client.service_account import ServiceAccountCredentials # ← この行を削除
 from flask import Flask, request, abort, jsonify
 from flask_cors import CORS
 from geopy.geocoders import Nominatim
@@ -30,10 +30,11 @@ QUESTIONNAIRE_LIFF_ID = "2008066763-JAkGQkmw"
 SATO_EMAIL = "sato@lumina-beauty.co.jp"
 
 # --- 認証設定 ---
-scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+# ★★★★★ ここからが変更点 ★★★★★
+# gspreadの認証方法を最新のgspread.service_accountに変更
 creds_path = '/etc/secrets/google_credentials.json'
-creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
-client = gspread.authorize(creds)
+client = gspread.service_account(filename=creds_path)
+# ★★★★★ ここまでが変更点 ★★★★★
 
 spreadsheet = client.open("店舗マスタ_LUMINA Offer用")
 user_management_sheet = spreadsheet.worksheet("ユーザー管理")
@@ -46,6 +47,7 @@ handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET'))
 
 # Gemini API
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+# モデルは高性能なflashに戻します
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 
@@ -71,14 +73,12 @@ def send_notification_email(subject, body):
 
 def process_and_send_offer(user_id, user_wishes):
     try:
-        # ★★★★★ 変数名を変更し、成功時(オファー文)と失敗時(理由)の両方を受け取れるようにします ★★★★★
         ranked_ids, matched_salon, result_or_reason = find_and_generate_offer(user_wishes)
         
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
 
             if matched_salon:
-                # 成功した場合、result_or_reason にはAIが生成したオファー文章が入っています
                 offer_text = result_or_reason
                 today_str = datetime.today().strftime('%Y/%m/%d')
                 
@@ -91,13 +91,16 @@ def process_and_send_offer(user_id, user_wishes):
                 messages = [FlexMessage(alt_text=f"{matched_salon['店舗名']}からのオファー", contents=flex_container)]
                 line_bot_api.push_message(PushMessageRequest(to=user_id, messages=messages))
             else:
-                # ★★★★★ 失敗した場合、result_or_reason にはマッチしなかった「理由」が入っています ★★★★★
                 reason = result_or_reason
                 print(f"ユーザーID {user_id} にマッチするサロンが見つからなかったため、オファーは送信されませんでした。詳細: {reason}")
 
 
     except Exception as e:
+        # エラーログをより詳細に出力するように変更
+        import traceback
         print(f"オファー送信中のエラー: {e}")
+        traceback.print_exc()
+
 
 def find_and_generate_offer(user_wishes):
     all_salons_data = salon_master_sheet.get_all_records()
@@ -267,19 +270,14 @@ def submit_schedule():
     salon_id = data.get('salonId')
     
     try:
-        # ★★★★★ ここからが変更点 ★★★★★
-        # まずユーザーIDが含まれる全てのセルを検索
         user_cells = offer_management_sheet.findall(user_id, in_column=1)
         row_to_update = -1
         
-        # 見つかった行の中から、店舗IDも一致するものを探す
         for cell in user_cells:
-            # 2列目（B列）の店舗IDを取得して比較
             record_salon_id = offer_management_sheet.cell(cell.row, 2).value
             if str(record_salon_id) == str(salon_id):
                 row_to_update = cell.row
-                break # 一致するものが見つかったらループを抜ける
-        # ★★★★★ ここまでが変更点 ★★★★★
+                break
         
         if row_to_update != -1:
             update_values = [
@@ -289,7 +287,6 @@ def submit_schedule():
                 data['date2'], data['startTime2'], data['endTime2'],
                 data['date3'], data['startTime3'], data['endTime3']
             ]
-            # 更新範囲はD列からN列
             offer_management_sheet.update(f'D{row_to_update}:N{row_to_update}', [update_values])
             
             subject = "【LUMINAオファー】面談日程の新規登録がありました"
@@ -374,8 +371,11 @@ def trigger_offer():
         print(f"ウェルカムメッセージの送信エラー: {e}")
 
     if 'birthdate' in user_wishes and user_wishes['birthdate']:
-        age = get_age_from_birthdate(user_wishes.get('birthdate'))
-        user_wishes['age'] = f"{ (age // 10) * 10 }代"
+        try:
+            age = get_age_from_birthdate(user_wishes.get('birthdate'))
+            user_wishes['age'] = f"{ (age // 10) * 10 }代"
+        except (ValueError, TypeError):
+            user_wishes['age'] = '' # 不正な日付形式の場合は空にする
 
     try:
         user_headers = user_management_sheet.row_values(1)
