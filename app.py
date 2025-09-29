@@ -4,8 +4,12 @@ import gspread
 import pandas as pd
 import google.generativeai as genai
 import re
-from datetime import datetime, timedelta
-# from oauth2client.service_account import ServiceAccountCredentials # ← この行を削除
+from datetime import datetime
+# ★★★★★ ここからがデバッグ用の追加コード ★★★★★
+import sys
+import pkg_resources
+# ★★★★★ ここまでがデバッグ用の追加コード ★★★★★
+
 from flask import Flask, request, abort, jsonify
 from flask_cors import CORS
 from geopy.geocoders import Nominatim
@@ -30,11 +34,8 @@ QUESTIONNAIRE_LIFF_ID = "2008066763-JAkGQkmw"
 SATO_EMAIL = "sato@lumina-beauty.co.jp"
 
 # --- 認証設定 ---
-# ★★★★★ ここからが変更点 ★★★★★
-# gspreadの認証方法を最新のgspread.service_accountに変更
 creds_path = '/etc/secrets/google_credentials.json'
 client = gspread.service_account(filename=creds_path)
-# ★★★★★ ここまでが変更点 ★★★★★
 
 spreadsheet = client.open("店舗マスタ_LUMINA Offer用")
 user_management_sheet = spreadsheet.worksheet("ユーザー管理")
@@ -47,10 +48,53 @@ handler = WebhookHandler(os.environ.get('YOUR_CHANNEL_SECRET'))
 
 # Gemini API
 genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-# モデルは高性能なflashに戻します
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 
+# ★★★★★ ここからがデバッグ用の追加コード ★★★★★
+@app.route("/debug-info", methods=['GET'])
+def debug_info():
+    try:
+        # requirements.txtの内容を読み込んで表示
+        with open('requirements.txt', 'r') as f:
+            requirements_content = f.read()
+
+        # 主要ライブラリのバージョンとインストール場所を取得
+        genai_version = pkg_resources.get_distribution("google-generativeai").version
+        genai_location = pkg_resources.get_distribution("google-generativeai").location
+        gspread_version = pkg_resources.get_distribution("gspread").version
+        gspread_location = pkg_resources.get_distribution("gspread").location
+        
+        # Pythonのバージョンと実行パス
+        python_version = sys.version
+        python_path = sys.executable
+
+        debug_log = (
+            "--- Python Environment ---\n"
+            f"Version: {python_version}\n"
+            f"Path: {python_path}\n\n"
+            "--- requirements.txt on Server ---\n"
+            f"{requirements_content}\n\n"
+            "--- Installed Libraries Info ---\n"
+            f"google-generativeai version: {genai_version} | location: {genai_location}\n"
+            f"gspread version: {gspread_version} | location: {gspread_location}\n"
+        )
+        # ログにデバッグ情報を出力
+        print("===== DEBUG INFO =====")
+        print(debug_log)
+        print("====================")
+        
+        # 画面にも表示
+        return f"<pre>{debug_log}</pre>"
+
+    except Exception as e:
+        print(f"Debug info error: {e}")
+        return f"Error getting debug info: {e}", 500
+
+# ★★★★★ ここまでがデバッグ用の追加コード ★★★★★
+
+
+# (これ以降のコードは変更ありません)
 def send_notification_email(subject, body):
     from_email = os.environ.get('MAIL_USERNAME')
     api_key = os.environ.get('SENDGRID_API_KEY')
@@ -74,48 +118,36 @@ def send_notification_email(subject, body):
 def process_and_send_offer(user_id, user_wishes):
     try:
         ranked_ids, matched_salon, result_or_reason = find_and_generate_offer(user_wishes)
-        
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
-
             if matched_salon:
                 offer_text = result_or_reason
                 today_str = datetime.today().strftime('%Y/%m/%d')
-                
                 offer_headers = ['ユーザーID', '店舗ID', 'オファー送信日', 'オファー状況']
                 initial_offer_data = { "ユーザーID": user_id, "店舗ID": matched_salon.get('店舗ID'), "オファー送信日": today_str, "オファー状況": "送信済み" }
                 new_offer_row = [initial_offer_data.get(h, '') for h in offer_headers]
                 offer_management_sheet.append_row(new_offer_row, value_input_option='USER_ENTERED')
-            
                 flex_container = FlexContainer.from_dict(create_salon_flex_message(matched_salon, offer_text))
                 messages = [FlexMessage(alt_text=f"{matched_salon['店舗名']}からのオファー", contents=flex_container)]
                 line_bot_api.push_message(PushMessageRequest(to=user_id, messages=messages))
             else:
                 reason = result_or_reason
                 print(f"ユーザーID {user_id} にマッチするサロンが見つからなかったため、オファーは送信されませんでした。詳細: {reason}")
-
-
     except Exception as e:
-        # エラーログをより詳細に出力するように変更
         import traceback
         print(f"オファー送信中のエラー: {e}")
         traceback.print_exc()
 
-
 def find_and_generate_offer(user_wishes):
     all_salons_data = salon_master_sheet.get_all_records()
     if not all_salons_data: return None, None, "サロン情報が見つかりません。"
-
     salons_df = pd.DataFrame(all_salons_data)
-    
     try:
         prefecture = user_wishes.get("area_prefecture", "")
         detail_area = user_wishes.get("area_detail", "")
         full_area = f"{prefecture} {detail_area}"
-        
         geolocator = Nominatim(user_agent="lumina_offer_geocoder")
         location = geolocator.geocode(full_area, timeout=10)
-
         if not location:
             print(f"ジオコーディング失敗: {full_area}")
             return None, None, "希望勤務地の位置情報を特定できませんでした。"
@@ -123,38 +155,28 @@ def find_and_generate_offer(user_wishes):
     except Exception as e:
         print(f"ジオコーディング中にエラーが発生: {e}")
         return None, None, "位置情報取得中にエラーが発生しました。"
-
     salons_df['緯度'] = pd.to_numeric(salons_df['緯度'], errors='coerce')
     salons_df['経度'] = pd.to_numeric(salons_df['経度'], errors='coerce')
     salons_df.dropna(subset=['緯度', '経度'], inplace=True)
-
     distances = [geodesic(user_coords, (salon['緯度'], salon['経度'])).kilometers for _, salon in salons_df.iterrows()]
-    
     salons_df['距離'] = distances
     nearby_salons = salons_df[salons_df['距離'] <= 25].copy()
     if nearby_salons.empty: return None, None, "希望勤務地の25km以内に条件に合うサロンが見つかりませんでした。"
-    
     user_role = user_wishes.get("role")
     user_license = user_wishes.get("license")
-
     salons_to_consider = nearby_salons[nearby_salons['募集状況'] == '募集中']
     if salons_to_consider.empty: return None, None, "募集中のサロンがありません。"
-
     def role_matcher(salon_roles):
         roles_list = [r.strip() for r in str(salon_roles).split(',')]
         return user_role in roles_list
-
     salons_to_consider = salons_to_consider[salons_to_consider['役職'].apply(role_matcher)]
     if salons_to_consider.empty: return None, None, "役職に合うサロンがありません。"
-
     if user_license == "取得済み":
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'] == '取得']
     else: 
         salons_to_consider = salons_to_consider[salons_to_consider['美容師免許'].isin(['取得', '未取得'])]
     if salons_to_consider.empty: return None, None, "免許条件に合うサロンがありません。"
-    
     salons_json_string = salons_to_consider.to_json(orient='records', force_ascii=False)
-
     prompt = f"""
     あなたは、美容師向けのスカウトサービス「LUMINA Offer」の優秀なAIアシスタントです。
     # 候補者プロフィール:
@@ -178,28 +200,20 @@ def find_and_generate_offer(user_wishes):
       "first_offer_message": "(ここに1件目のサロン用のオファー文章を記述)"
     }}
     """
-    
     response = model.generate_content(prompt)
-    
     try:
         response_text = response.text
         json_str_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if not json_str_match: raise ValueError("Response does not contain a valid JSON object.")
         json_str = json_str_match.group(0)
         gemini_response = json.loads(json_str)
-        
         ranked_ids = gemini_response.get("ranked_store_ids")
         first_offer_message = gemini_response.get("first_offer_message")
-        
         if not ranked_ids: return None, None, "AIによるスコアリングの結果、最適なサロンが見つかりませんでした。"
-              
         first_match_id = ranked_ids[0]
         matched_salon_info_series = salons_to_consider[salons_to_consider['店舗ID'].astype(int) == int(first_match_id)]
-        
         if matched_salon_info_series.empty: return None, None, "マッチしたサロン情報が見つかりませんでした。"
-        
         matched_salon_info = matched_salon_info_series.iloc[0].to_dict()
-        
         return ranked_ids, matched_salon_info, first_offer_message
     except Exception as e:
         print(f"Geminiからの応答解析エラー: {e}")
@@ -212,11 +226,9 @@ def create_salon_flex_message(salon, offer_text):
         display_role = "アシスタント"
     else:
         display_role = "スタイリスト"
-
     recruitment_type = salon.get("募集", "")
     salon_id = salon.get('店舗ID')
     liff_url = f"https://liff.line.me/{SCHEDULE_LIFF_ID}?salonId={salon_id}"
-    
     return {
         "type": "bubble", "hero": { "type": "image", "url": salon.get("画像URL", ""), "size": "full", "aspectRatio": "20:13", "aspectMode": "cover" },
         "body": { "type": "box", "layout": "vertical", "contents": [ 
@@ -268,17 +280,14 @@ def submit_schedule():
     data = request.get_json()
     user_id = data.get('userId')
     salon_id = data.get('salonId')
-    
     try:
         user_cells = offer_management_sheet.findall(user_id, in_column=1)
         row_to_update = -1
-        
         for cell in user_cells:
             record_salon_id = offer_management_sheet.cell(cell.row, 2).value
             if str(record_salon_id) == str(salon_id):
                 row_to_update = cell.row
                 break
-        
         if row_to_update != -1:
             update_values = [
                 '日程調整中',
@@ -288,12 +297,10 @@ def submit_schedule():
                 data['date3'], data['startTime3'], data['endTime3']
             ]
             offer_management_sheet.update(f'D{row_to_update}:N{row_to_update}', [update_values])
-            
             subject = "【LUMINAオファー】面談日程の新規登録がありました"
             body = f"""
             以下の内容で、ユーザーから面談希望日時の登録がありました。
             速やかにサロンとの日程調整を開始してください。
-
             ■ ユーザーID: {user_id}
             ■ サロンID: {salon_id}
             ■ 希望の面談方法: {data['interviewMethod']}
@@ -302,7 +309,6 @@ def submit_schedule():
             ■ 第3希望: {data.get('date3', '')} {data.get('startTime3', '')}〜{data.get('endTime3', '')}
             """
             send_notification_email(subject, body)
-            
             next_liff_url = f"https://liff.line.me/{QUESTIONNAIRE_LIFF_ID}"
             return jsonify({ "status": "success", "message": "Schedule submitted successfully", "nextLiffUrl": next_liff_url })
         else:
@@ -315,12 +321,10 @@ def submit_schedule():
 def submit_questionnaire():
     data = request.get_json()
     user_id = data.get('userId')
-
     try:
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
             row_to_update = cell.row
-            
             update_values = [
                 data.get('q1_area'), data.get('q2_job_changes'), data.get('q3_current_employment'),
                 data.get('q4_experience_years'), data.get('q5_desired_employment'),
@@ -328,13 +332,11 @@ def submit_questionnaire():
                 data.get('q8_ideal_beautician')
             ]
             user_management_sheet.update(f'Q{row_to_update}:X{row_to_update}', [update_values])
-            
             user_name = user_management_sheet.cell(row_to_update, 4).value
             subject = f"【LUMINAオファー】{user_name}様からアンケート回答がありました"
             body = f"""
             {user_name}様（ユーザーID: {user_id}）から、面談前アンケートへの回答がありました。
             内容を確認し、面談の準備を進めてください。
-
             ---
             1. お住まいエリア: {data.get('q1_area')}
             2. 転職回数: {data.get('q2_job_changes')}
@@ -346,7 +348,6 @@ def submit_questionnaire():
             8. 理想の美容師像: {data.get('q8_ideal_beautician')}
             """
             send_notification_email(subject, body)
-            
             return jsonify({"status": "success", "message": "Questionnaire submitted successfully"})
         else:
             return jsonify({"status": "error", "message": "User not found"}), 404
@@ -361,7 +362,6 @@ def trigger_offer():
     user_id = data.get('userId')
     user_wishes = data.get('wishes')
     if not user_id or not user_wishes: return jsonify({"status": "error", "message": "Missing userId or wishes"}), 400
-    
     try:
         with ApiClient(configuration) as api_client:
             line_bot_api = MessagingApi(api_client)
@@ -369,17 +369,14 @@ def trigger_offer():
             line_bot_api.push_message(PushMessageRequest( to=user_id, messages=[TextMessage(text=welcome_message)] ))
     except Exception as e:
         print(f"ウェルカムメッセージの送信エラー: {e}")
-
     if 'birthdate' in user_wishes and user_wishes['birthdate']:
         try:
             age = get_age_from_birthdate(user_wishes.get('birthdate'))
             user_wishes['age'] = f"{ (age // 10) * 10 }代"
         except (ValueError, TypeError):
-            user_wishes['age'] = '' # 不正な日付形式の場合は空にする
-
+            user_wishes['age'] = ''
     try:
         user_headers = user_management_sheet.row_values(1)
-        
         user_row_dict = {
             "ユーザーID": user_id, "登録日": datetime.today().strftime('%Y/%m/%d'), "ステータス": 'オファー中',
             "氏名": user_wishes.get('full_name'), "性別": user_wishes.get('gender'), "生年月日": user_wishes.get('birthdate'),
@@ -388,10 +385,8 @@ def trigger_offer():
             "職場満足度": user_wishes.get('satisfaction'), "興味のある待遇": user_wishes.get('perk'),
             "現在の状況": user_wishes.get('current_status'), "転職希望時期": user_wishes.get('timing'), "美容師免許": user_wishes.get('license')
         }
-        
         profile_headers = user_headers[:16]
         profile_row_values = [user_row_dict.get(h, '') for h in profile_headers]
-        
         cell = user_management_sheet.find(user_id, in_column=1)
         if cell:
             range_to_update = f'A{cell.row}:{chr(ord("A") + len(profile_row_values) - 1)}{cell.row}'
@@ -399,14 +394,11 @@ def trigger_offer():
         else:
             full_row = profile_row_values + [''] * 8 
             user_management_sheet.append_row(full_row)
-
     except Exception as e:
         print(f"ユーザー管理シートへの書き込みエラー: {e}")
         process_and_send_offer(user_id, user_wishes)
         return jsonify({"status": "success_with_db_error", "message": "Offer task processed, but failed to write to user sheet"})
-
     process_and_send_offer(user_id, user_wishes)
-    
     return jsonify({"status": "success", "message": "Offer task processed immediately"})
 
 if __name__ == "__main__":
